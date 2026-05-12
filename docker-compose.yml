@@ -1,0 +1,88 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reception}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-reception_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - default
+      - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reception}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-reception}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-reception_db}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: 720
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: 7
+      FTP_HOST: ${FTP_HOST:-}
+      FTP_USER: ${FTP_USER:-}
+      FTP_PASSWORD: ${FTP_PASSWORD:-}
+      FTP_PORT: ${FTP_PORT:-22}
+      FTP_USE_SFTP: ${FTP_USE_SFTP:-true}
+      FTP_PATH_RECEPTIONS: ${FTP_PATH_RECEPTIONS:-/receptions}
+      FTP_PATH_CODES_BARRES: ${FTP_PATH_CODES_BARRES:-/codes_barres}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      MAIL_ACHATS: ${MAIL_ACHATS:-}
+      DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+    ports:
+      - "7000:8000"
+    volumes:
+      - pdf_storage:/app/storage/pdf
+      - photo_storage:/app/storage/photos
+      - ftp_archive:/app/storage/ftp_archive
+    networks:
+      - default
+      - proxy
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+    restart: unless-stopped
+    ports:
+      - "7001:80"
+    networks:
+      - default
+      - proxy
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  pdf_storage:
+  photo_storage:
+  ftp_archive:
+
+networks:
+  default:
+  proxy:
+    external: true

@@ -1,0 +1,85 @@
+/* Reset & base tablette */
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  height: 100%;
+  /* Empêche le zoom involontaire sur focus input (iOS/Android) */
+  font-size: 16px;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #f0f4f8;
+  color: #222;
+  /* Meilleur rendu sur tablette */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Touch targets minimum 44px (WCAG / Apple HIG) */
+button, [role="button"], input[type="submit"], input[type="button"] {
+  min-height: 44px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+/* Inputs : font-size >= 16px pour éviter le zoom auto sur iOS */
+input, textarea, select {
+  font-size: 16px;
+  font-family: inherit;
+}
+
+/* Focus visible pour accessibilité clavier (douchette) */
+:focus-visible {
+  outline: 3px solid #2980b9;
+  outline-offset: 2px;
+}
+
+/* Scrollbars discrètes sur Android */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,.2); border-radius: 2px; }
+
+/* Animation spinner pour état "saving" */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Animation fade-in des modales */
+@keyframes slideUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* Empêche la sélection de texte sur les éléments interactifs */
+button, .card-tap {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Mode paysage tablette : padding latéral plus large */
+@media (orientation: landscape) and (min-width: 768px) {
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+}
+
+/* Surcharge globale des tables pour défilement horizontal sur petit écran */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}

@@ -1,0 +1,74 @@
+# Environnement de développement local avec hot-reload
+# Usage : docker compose -f docker-compose.dev.yml up
+#
+# Différences vs production :
+#  - Backend : uvicorn --reload (rechargement à chaque changement Python)
+#  - Frontend : Vite dev server avec HMR sur le port 5173
+#  - Pas de Caddy : accès direct backend:8000, frontend:5173
+#  - Variables d'env inline simplifiées (pas de secrets réels)
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: reception
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: reception_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reception"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    environment:
+      DATABASE_URL: postgresql+asyncpg://reception:devpassword@db:5432/reception_db
+      JWT_SECRET: dev-secret-not-for-production-32chars!!
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: 720
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: 7
+      ENVIRONMENT: development
+      FTP_HOST: ""
+      SMTP_HOST: ""
+      MAIL_ACHATS: ""
+      DOMAIN_NAME: localhost
+      CORS_ORIGINS: '["http://localhost:5173","http://localhost:4173"]'
+    volumes:
+      # Monte le code source pour le hot-reload
+      - ./backend:/app
+      - pdf_storage_dev:/app/storage/pdf
+      - photo_storage_dev:/app/storage/photos
+      - ftp_archive_dev:/app/storage/ftp_archive
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      VITE_API_URL: http://localhost:8000
+    volumes:
+      # Monte le code source pour le HMR Vite
+      - ./frontend:/app
+      - /app/node_modules   # préserve node_modules du conteneur
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata_dev:
+  pdf_storage_dev:
+  photo_storage_dev:
+  ftp_archive_dev:
