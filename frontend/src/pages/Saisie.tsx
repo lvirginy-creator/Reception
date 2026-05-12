@@ -7,7 +7,6 @@ import PhotoCapture from "../components/PhotoCapture";
 import AjoutHorsCommande from "../components/AjoutHorsCommande";
 import { receptionsApi, type Ligne, type ReceptionDetail } from "../api/receptions";
 import { articlesApi, type Article } from "../api/articles";
-import { useAuthStore } from "../store/authStore";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { db } from "../db/database";
 import { syncApi } from "../api/sync";
@@ -22,7 +21,6 @@ export default function Saisie() {
   const { id } = useParams<{ id: string }>();
   const receptionId = Number(id);
   const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
   const online = useOnlineStatus();
 
   const [reception, setReception] = useState<ReceptionDetail | null>(null);
