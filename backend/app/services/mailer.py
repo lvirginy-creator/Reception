@@ -11,7 +11,7 @@ import openpyxl
 from loguru import logger
 
 from app.core.config import get_settings
-from app.models.models import CodeBarre, LigneReception, Reception, SourceCodeBarre
+from app.models.models import Reception
 
 settings = get_settings()
 
@@ -27,6 +27,31 @@ def _smtp_connection():
     if settings.SMTP_USER:
         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
     return server
+
+
+def send_test_mail(to: str) -> bool:
+    """Envoie un mail de test pour vérifier la configuration SMTP."""
+    if not settings.SMTP_HOST:
+        logger.warning("SMTP non configuré")
+        return False
+    try:
+        msg = MIMEText(
+            "Bonjour,\n\nCeci est un mail de test de l'application de réception.\n\n"
+            "La configuration SMTP est correcte.\n\nCordialement,\nApplication de réception",
+            "plain", "utf-8"
+        )
+        msg["From"] = settings.SMTP_USER
+        msg["To"] = to
+        msg["Subject"] = "Test SMTP — Application Réception"
+        with _smtp_connection() as server:
+            server.sendmail(settings.SMTP_USER, [to], msg.as_string())
+        logger.info(f"Mail de test envoyé à {to}")
+        print(f"Mail de test envoyé avec succès à {to}")
+        return True
+    except Exception as e:
+        logger.error(f"Erreur envoi mail test : {e}")
+        print(f"ERREUR SMTP : {e}")
+        return False
 
 
 def send_validation_mail(
@@ -55,7 +80,6 @@ def send_validation_mail(
         f"– {reception.fournisseur_nom} – {date_str}"
     )
 
-    # Corps
     nb_ecarts = sum(
         1 for l in reception.lignes
         if not l.ajout_hors_commande
@@ -75,7 +99,6 @@ def send_validation_mail(
     )
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
-    # PJ PDF
     with open(pdf_path, "rb") as f:
         pdf_data = f.read()
     pdf_filename = f"reception_{reception.numero_en}_{date_str.replace('/', '-')}.pdf"
@@ -94,7 +117,6 @@ def send_validation_mail(
         logger.error(f"Erreur envoi mail validation : {e}")
         return False
 
-    # --- Mail codes-barres (si nouveaux) ---
     if nouveaux_codes_barres and settings.MAIL_ACHATS:
         try:
             _send_codes_barres_mail(reception, nouveaux_codes_barres, date_str, magasin_nom)
