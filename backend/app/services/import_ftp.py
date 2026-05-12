@@ -53,9 +53,25 @@ def _get_ftp_client():
         return ssh.open_sftp(), ssh
     else:
         import ftplib
-        ftp = ftplib.FTP()
+
+        # FileZilla Server exige la reprise de session TLS sur le canal de données.
+        # ftplib.FTP_TLS ne le fait pas nativement — on sous-classe pour passer
+        # la session TLS du canal de contrôle au canal de données.
+        class _FTPTLSResuming(ftplib.FTP_TLS):
+            def ntransfercmd(self, cmd, rest=None):
+                conn, size = ftplib.FTP.ntransfercmd(self, cmd, rest)
+                if self._prot_p:
+                    conn = self.context.wrap_socket(
+                        conn,
+                        server_hostname=self.host,
+                        session=self.sock.session,
+                    )
+                return conn, size
+
+        ftp = _FTPTLSResuming()
         ftp.connect(settings.FTP_HOST, settings.FTP_PORT, timeout=30)
         ftp.login(settings.FTP_USER, settings.FTP_PASSWORD)
+        ftp.prot_p()
         return ftp, None
 
 
