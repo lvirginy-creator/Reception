@@ -42,11 +42,11 @@ export default function Validation() {
   };
 
   const handleQtyChange = async (ligneId: number, val: string) => {
-    const qty = val === "" ? null : parseInt(val, 10);
+    const qty: number | null = val === "" ? null : parseInt(val, 10);
     setLignes((prev) => prev.map((l) => l.id === ligneId ? { ...l, quantite_recue: qty } : l));
     setSaving(ligneId);
     try {
-      await receptionsApi.updateLigne(receptionId, ligneId, { quantite_recue: qty });
+      await receptionsApi.updateLigne(receptionId, ligneId, { quantite_recue: qty ?? undefined });
     } finally {
       setSaving(null);
     }

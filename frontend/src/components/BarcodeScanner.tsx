@@ -3,13 +3,8 @@
  * - Douchette HID : input caché global qui capte les caractères rapides (< 50 ms entre chaque)
  * - Caméra de secours : @zxing/browser BrowserMultiFormatReader
  */
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
-
-interface BarcodeScannerProps {
-  onScan: (code: string) => void;
-  active?: boolean;
-}
 
 // --- Douchette HID ---
 // Accumule les chars rapides (< 80 ms d'écart) et déclenche onScan sur Enter
@@ -52,13 +47,12 @@ export function useBarcodeInput(onScan: (code: string) => void, active = true) {
 // --- Caméra @zxing ---
 export function CameraScanner({ onScan, onClose }: { onScan: (code: string) => void; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const controlsRef = useRef<{ stop: () => void } | null>(null);
   const [error, setError] = useState("");
   const scanned = useRef(false);
 
   useEffect(() => {
     const reader = new BrowserMultiFormatReader();
-    readerRef.current = reader;
     scanned.current = false;
 
     (async () => {
@@ -70,10 +64,10 @@ export function CameraScanner({ onScan, onClose }: { onScan: (code: string) => v
 
         if (!deviceId) { setError("Aucune caméra détectée"); return; }
 
-        await reader.decodeFromVideoDevice(
+        controlsRef.current = await reader.decodeFromVideoDevice(
           deviceId,
           videoRef.current!,
-          (result, err) => {
+          (result, _err) => {
             if (result && !scanned.current) {
               scanned.current = true;
               onScan(result.getText());
@@ -87,7 +81,7 @@ export function CameraScanner({ onScan, onClose }: { onScan: (code: string) => v
     })();
 
     return () => {
-      readerRef.current?.reset();
+      controlsRef.current?.stop();
     };
   }, []);
 

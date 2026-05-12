@@ -41,9 +41,6 @@ export default function Saisie() {
     reception?.statut === "envoye" ||
     reception?.statut === "archive";
 
-  const isResponsable =
-    user?.role === "responsable" || user?.role === "admin";
-
   // Chargement initial
   useEffect(() => {
     (async () => {
@@ -87,7 +84,7 @@ export default function Saisie() {
         );
 
         if (online) {
-          await receptionsApi.updateLigne(receptionId, ligneId, { quantite_recue, commentaire });
+          await receptionsApi.updateLigne(receptionId, ligneId, { quantite_recue: quantite_recue ?? undefined, commentaire });
         } else {
           // Stocker dans la file offline
           const existing = await db.pending_updates
@@ -302,7 +299,6 @@ export default function Saisie() {
           onSelect={(article, barcode) => {
             setModal(null);
             if (barcode) {
-              // Code inconnu associé → chercher/créer la ligne
               const ligne = lignes.find((l) => l.reference_interne === article.reference_interne);
               if (ligne) {
                 setActiveLigneId(ligne.id);
@@ -310,7 +306,6 @@ export default function Saisie() {
                 setModal({ type: "hors-commande", prefill: { article, barcode } });
               }
             } else {
-              // Recherche manuelle → focus sur la ligne
               const ligne = lignes.find((l) => l.reference_interne === article.reference_interne);
               if (ligne) {
                 setActiveLigneId(ligne.id);
@@ -344,7 +339,6 @@ export default function Saisie() {
                   readonly={isReadonly}
                   onUpload={async (file) => {
                     await receptionsApi.uploadPhoto(receptionId, ligne.id, file);
-                    // Rafraîchir la ligne
                     if (online) {
                       const updated = await receptionsApi.get(receptionId);
                       setLignes(updated.lignes);

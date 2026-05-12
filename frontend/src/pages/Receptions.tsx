@@ -51,12 +51,12 @@ export default function Receptions() {
         if (filtreFournisseur) all = all.filter((r) =>
           r.fournisseur_nom.toLowerCase().includes(filtreFournisseur.toLowerCase())
         );
-        setReceptions(all.sort((a, b) => b.numero_en.localeCompare(a.numero_en)));
+        setReceptions(all.sort((a, b) => b.numero_en.localeCompare(a.numero_en)) as Reception[]);
       }
     } catch {
       // Fallback IndexedDB si erreur réseau
       const all = await db.receptions.toArray();
-      setReceptions(all.sort((a, b) => b.numero_en.localeCompare(a.numero_en)));
+      setReceptions(all.sort((a, b) => b.numero_en.localeCompare(a.numero_en)) as Reception[]);
     } finally {
       setLoading(false);
     }
