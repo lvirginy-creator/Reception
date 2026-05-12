@@ -78,8 +78,8 @@ def _get_ftp_client():
 def _list_files(client, path: str) -> list[str]:
     if hasattr(client, "listdir"):  # SFTP
         return client.listdir(path)
-    else:  # FTP
-        return client.nlst(path)
+    else:  # FTP — nlst peut retourner des chemins complets selon le serveur
+        return [os.path.basename(f) for f in client.nlst(path)]
 
 
 def _read_file(client, remote_path: str) -> bytes:
@@ -160,11 +160,9 @@ async def import_receptions(db: AsyncSession) -> ImportLog:
             )
             if r2.scalar_one_or_none():
                 logger.info(f"Réception {numero_en}/{magasin_code} déjà importée, ignorée")
-                # Archiver quand même pour ne pas retraiter
                 _archive_file(client, ftp_path, filename)
                 continue
 
-            # Lire le fichier
             try:
                 content = _read_file(client, f"{ftp_path}/{filename}")
                 nb = await _process_reception_file(
@@ -219,7 +217,6 @@ async def _process_reception_file(
     if not rows:
         return 0
 
-    # Détecter le nom du fournisseur depuis la première ligne non vide
     fournisseur_nom = ""
     for row in rows:
         if row and len(row) >= 3 and row[2]:
@@ -254,7 +251,6 @@ async def _process_reception_file(
         if not reference_interne:
             continue
 
-        # Résoudre ou créer l'article
         r = await db.execute(select(Article).where(Article.reference_interne == reference_interne))
         article = r.scalar_one_or_none()
         if not article:
@@ -307,7 +303,6 @@ async def import_codes_barres(db: AsyncSession) -> ImportLog:
                 ssh.close()
             return log
 
-        # Prendre le fichier le plus récent
         filename = files[-1]
         log.fichier_nom = filename
         content = _read_file(client, f"{ftp_path}/{filename}")
@@ -335,7 +330,6 @@ async def _process_codes_barres_file(db: AsyncSession, content: bytes) -> tuple[
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     ws = wb.active
 
-    # Charger tout le fichier : {reference_interne: [code1, code2, ...]}
     file_data: dict[str, list[str]] = {}
     nb_erreurs = 0
 
@@ -347,10 +341,8 @@ async def _process_codes_barres_file(db: AsyncSession, content: bytes) -> tuple[
         if ref and code:
             file_data.setdefault(ref, []).append(code)
 
-    # Collecter tous les codes du fichier dans un set
     all_file_codes = {code for codes in file_data.values() for code in codes}
 
-    # Upsert : pour chaque (ref, code) du fichier
     nb_traites = 0
     for ref, codes in file_data.items():
         r = await db.execute(select(Article).where(Article.reference_interne == ref))
@@ -364,7 +356,6 @@ async def _process_codes_barres_file(db: AsyncSession, content: bytes) -> tuple[
             r2 = await db.execute(select(CodeBarre).where(CodeBarre.code == code))
             existing = r2.scalar_one_or_none()
             if existing:
-                # Mettre à jour si c'est un import (ne pas toucher aux ajouts terrain)
                 if existing.source == SourceCodeBarre.import_:
                     existing.article_id = article.id
             else:
@@ -378,7 +369,6 @@ async def _process_codes_barres_file(db: AsyncSession, content: bytes) -> tuple[
 
     await db.flush()
 
-    # Supprimer les codes source='import' qui ne sont plus dans le fichier
     r = await db.execute(
         select(CodeBarre).where(CodeBarre.source == SourceCodeBarre.import_)
     )
