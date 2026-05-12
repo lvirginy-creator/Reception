@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Rapport d'écart — {{ reception.numero_en }}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #1a1a2e; background: #fff; }
+  .header { background: #1a1a2e; color: #fff; padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 18px; font-weight: 700; }
+  .header .meta { font-size: 11px; text-align: right; opacity: 0.85; }
+  .section { padding: 16px 24px; border-bottom: 1px solid #e5e7eb; }
+  .section h2 { font-size: 13px; font-weight: 700; color: #1a1a2e; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .info-item label { display: block; font-size: 10px; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
+  .info-item span { font-weight: 600; font-size: 12px; }
+  .stats { display: flex; gap: 16px; padding: 14px 24px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; }
+  .stat-box { flex: 1; text-align: center; padding: 10px; border-radius: 6px; }
+  .stat-box.conforme { background: #d1fae5; }
+  .stat-box.ecart { background: #fee2e2; }
+  .stat-box.hors { background: #fef3c7; }
+  .stat-box .num { font-size: 22px; font-weight: 700; }
+  .stat-box .label { font-size: 10px; color: #374151; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead tr { background: #1a1a2e; color: #fff; }
+  thead th { padding: 8px 10px; text-align: left; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #f9fafb; }
+  tbody tr:hover { background: #f0f4ff; }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+  .badge-ok { background: #d1fae5; color: #065f46; }
+  .badge-ecart-pos { background: #dbeafe; color: #1e40af; }
+  .badge-ecart-neg { background: #fee2e2; color: #991b1b; }
+  .badge-hors { background: #fef3c7; color: #92400e; }
+  .badge-nd { background: #f3f4f6; color: #6b7280; }
+  .footer { padding: 14px 24px; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; }
+  .section-title-hors { color: #92400e; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Rapport d'écart</h1>
+    <div style="font-size:13px; margin-top:4px; opacity:0.9">{{ reception.numero_en }}</div>
+  </div>
+  <div class="meta">
+    <div>{{ magasin.nom }}</div>
+    <div>Validé par {{ validateur_nom }}</div>
+    <div>{{ date_validation.strftime('%d/%m/%Y à %H:%M') }}</div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Informations réception</h2>
+  <div class="info-grid">
+    <div class="info-item">
+      <label>Fournisseur</label>
+      <span>{{ reception.fournisseur_nom or '—' }}</span>
+    </div>
+    <div class="info-item">
+      <label>Code fournisseur</label>
+      <span>{{ reception.code_fournisseur or '—' }}</span>
+    </div>
+    <div class="info-item">
+      <label>Magasin</label>
+      <span>{{ magasin.nom }} ({{ magasin.code }})</span>
+    </div>
+    <div class="info-item">
+      <label>Mode de saisie</label>
+      <span>{% if reception.saisie_aveugle %}Saisie à l'aveugle{% else %}Saisie guidée{% endif %}</span>
+    </div>
+    <div class="info-item">
+      <label>Importé le</label>
+      <span>{{ reception.created_at.strftime('%d/%m/%Y') if reception.created_at else '—' }}</span>
+    </div>
+    <div class="info-item">
+      <label>Statut</label>
+      <span>{{ reception.statut.value | title }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat-box conforme">
+    <div class="num">{{ nb_conformes }}</div>
+    <div class="label">Conformes</div>
+  </div>
+  <div class="stat-box ecart">
+    <div class="num">{{ nb_ecarts }}</div>
+    <div class="label">Avec écart</div>
+  </div>
+  <div class="stat-box hors">
+    <div class="num">{{ nb_hors_commande }}</div>
+    <div class="label">Hors commande</div>
+  </div>
+</div>
+
+{% set lignes_normales = lignes | selectattr('ajout_hors_commande', 'equalto', false) | list %}
+{% set lignes_hors = lignes | selectattr('ajout_hors_commande', 'equalto', true) | list %}
+
+<div class="section">
+  <h2>Détail des lignes</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Réf. interne</th>
+        <th>Réf. fournisseur</th>
+        <th>Désignation</th>
+        <th style="text-align:center">Attendu</th>
+        <th style="text-align:center">Reçu</th>
+        <th style="text-align:center">Écart</th>
+        <th style="text-align:center">Statut</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ligne in lignes_normales %}
+      {% set e = ecart_fn(ligne) %}
+      <tr>
+        <td>{{ ligne.reference_interne or '—' }}</td>
+        <td>{{ ligne.reference_fournisseur or '—' }}</td>
+        <td>{{ ligne.designation }}</td>
+        <td style="text-align:center">{{ ligne.quantite_attendue if ligne.quantite_attendue is not none else '—' }}</td>
+        <td style="text-align:center">{{ ligne.quantite_recue if ligne.quantite_recue is not none else '—' }}</td>
+        <td style="text-align:center">
+          {% if e is none %}—
+          {% elif e > 0 %}+{{ e }}
+          {% elif e < 0 %}{{ e }}
+          {% else %}0{% endif %}
+        </td>
+        <td style="text-align:center">
+          {% if e is none %}
+            <span class="badge badge-nd">N/D</span>
+          {% elif e == 0 %}
+            <span class="badge badge-ok">OK</span>
+          {% elif e > 0 %}
+            <span class="badge badge-ecart-pos">Surplus</span>
+          {% else %}
+            <span class="badge badge-ecart-neg">Manquant</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if lignes_hors %}
+<div class="section">
+  <h2 class="section-title-hors">Articles hors commande</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Réf. interne</th>
+        <th>Réf. fournisseur</th>
+        <th>Désignation</th>
+        <th style="text-align:center">Quantité reçue</th>
+        <th style="text-align:center">Statut</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ligne in lignes_hors %}
+      <tr>
+        <td>{{ ligne.reference_interne or '—' }}</td>
+        <td>{{ ligne.reference_fournisseur or '—' }}</td>
+        <td>{{ ligne.designation }}</td>
+        <td style="text-align:center">{{ ligne.quantite_recue if ligne.quantite_recue is not none else '—' }}</td>
+        <td style="text-align:center"><span class="badge badge-hors">Hors commande</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="footer">
+  <span>Application Réception — Groupe Caraïbes Distribution</span>
+  <span>Généré le {{ date_validation.strftime('%d/%m/%Y à %H:%M') }}</span>
+</div>
+
+</body>
+</html>
