@@ -7,14 +7,11 @@ Codes-barres : fichier unique (remplacement intelligent).
 import os
 import re
 import io
-import shutil
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import IO
 
 import openpyxl
 from loguru import logger
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -27,7 +24,6 @@ from app.models.models import (
 
 settings = get_settings()
 
-# Regex pour le nom de fichier réception
 RECEPTION_FILENAME_RE = re.compile(
     r"^(?P<numero_en>[^_]+)_(?P<magasin_code>[^_]+)_(?P<code_fournisseur>.+)\.xlsx$",
     re.IGNORECASE,
@@ -38,7 +34,10 @@ RECEPTION_FILENAME_RE = re.compile(
 # Connecteur FTP/SFTP
 # ---------------------------------------------------------------------------
 
-def _get_ftp_client():
+def _make_ftp_client():
+    """Crée une nouvelle connexion FTP/SFTP. À appeler pour chaque opération
+    de données car FileZilla n'accepte pas la réutilisation de ticket TLS
+    entre plusieurs canaux de données successifs."""
     if settings.FTP_USE_SFTP:
         import paramiko
         ssh = paramiko.SSHClient()
@@ -54,9 +53,7 @@ def _get_ftp_client():
     else:
         import ftplib
 
-        # FileZilla Server exige la reprise de session TLS sur le canal de données.
-        # ftplib.FTP_TLS ne le fait pas nativement — on sous-classe pour passer
-        # la session TLS du canal de contrôle au canal de données.
+        # FileZilla exige la reprise de session TLS sur le canal de données.
         class _FTPTLSResuming(ftplib.FTP_TLS):
             def ntransfercmd(self, cmd, rest=None):
                 conn, size = ftplib.FTP.ntransfercmd(self, cmd, rest)
@@ -75,36 +72,63 @@ def _get_ftp_client():
         return ftp, None
 
 
-def _list_files(client, path: str) -> list[str]:
-    if hasattr(client, "listdir"):  # SFTP
-        return client.listdir(path)
-    else:  # FTP — nlst peut retourner des chemins complets selon le serveur
-        return [os.path.basename(f) for f in client.nlst(path)]
-
-
-def _read_file(client, remote_path: str) -> bytes:
-    if hasattr(client, "open"):  # SFTP
-        with client.open(remote_path, "rb") as f:
-            return f.read()
-    else:  # FTP
-        buf = io.BytesIO()
-        client.retrbinary(f"RETR {remote_path}", buf.write)
-        return buf.getvalue()
-
-
-def _move_file(client, src: str, dst_dir: str, filename: str):
-    if hasattr(client, "rename"):  # SFTP
+def _close(client, ssh):
+    try:
+        client.quit() if hasattr(client, 'quit') else client.close()
+    except Exception:
+        pass
+    if ssh:
         try:
-            client.mkdir(dst_dir)
-        except OSError:
-            pass
-        client.rename(src, f"{dst_dir}/{filename}")
-    else:  # FTP
-        try:
-            client.mkd(dst_dir)
+            ssh.close()
         except Exception:
             pass
-        client.rename(src, f"{dst_dir}/{filename}")
+
+
+def _list_files(path: str) -> list[str]:
+    """Liste les fichiers d'un répertoire FTP (connexion fraîche)."""
+    client, ssh = _make_ftp_client()
+    try:
+        if hasattr(client, "listdir"):  # SFTP
+            return client.listdir(path)
+        else:  # FTP
+            return [os.path.basename(f) for f in client.nlst(path)]
+    finally:
+        _close(client, ssh)
+
+
+def _read_file(remote_path: str) -> bytes:
+    """Télécharge un fichier FTP (connexion fraîche)."""
+    client, ssh = _make_ftp_client()
+    try:
+        if hasattr(client, "open"):  # SFTP
+            with client.open(remote_path, "rb") as f:
+                return f.read()
+        else:  # FTP
+            buf = io.BytesIO()
+            client.retrbinary(f"RETR {remote_path}", buf.write)
+            return buf.getvalue()
+    finally:
+        _close(client, ssh)
+
+
+def _move_file(src: str, dst_dir: str, filename: str):
+    """Déplace un fichier FTP (connexion fraîche)."""
+    client, ssh = _make_ftp_client()
+    try:
+        if hasattr(client, "rename"):  # SFTP
+            try:
+                client.mkdir(dst_dir)
+            except OSError:
+                pass
+            client.rename(src, f"{dst_dir}/{filename}")
+        else:  # FTP
+            try:
+                client.mkd(dst_dir)
+            except Exception:
+                pass
+            client.rename(src, f"{dst_dir}/{filename}")
+    finally:
+        _close(client, ssh)
 
 
 # ---------------------------------------------------------------------------
@@ -123,10 +147,8 @@ async def import_receptions(db: AsyncSession) -> ImportLog:
         return log
 
     try:
-        client, ssh = _get_ftp_client()
         ftp_path = settings.FTP_PATH_RECEPTIONS
-
-        files = [f for f in _list_files(client, ftp_path) if f.lower().endswith(".xlsx")]
+        files = [f for f in _list_files(ftp_path) if f.lower().endswith(".xlsx")]
         logger.info(f"Import réceptions : {len(files)} fichier(s) trouvé(s)")
 
         lignes_traitees = 0
@@ -143,7 +165,6 @@ async def import_receptions(db: AsyncSession) -> ImportLog:
             magasin_code = m.group("magasin_code")
             code_fournisseur = m.group("code_fournisseur")
 
-            # Résoudre le magasin
             r = await db.execute(select(Magasin).where(Magasin.code == magasin_code))
             magasin = r.scalar_one_or_none()
             if not magasin:
@@ -151,7 +172,6 @@ async def import_receptions(db: AsyncSession) -> ImportLog:
                 lignes_erreur += 1
                 continue
 
-            # Vérifier doublon (règle C5)
             r2 = await db.execute(
                 select(Reception).where(
                     Reception.numero_en == numero_en,
@@ -160,11 +180,11 @@ async def import_receptions(db: AsyncSession) -> ImportLog:
             )
             if r2.scalar_one_or_none():
                 logger.info(f"Réception {numero_en}/{magasin_code} déjà importée, ignorée")
-                _archive_file(client, ftp_path, filename)
+                _archive_file(ftp_path, filename)
                 continue
 
             try:
-                content = _read_file(client, f"{ftp_path}/{filename}")
+                content = _read_file(f"{ftp_path}/{filename}")
                 nb = await _process_reception_file(
                     db, content, numero_en, magasin, code_fournisseur
                 )
@@ -174,12 +194,7 @@ async def import_receptions(db: AsyncSession) -> ImportLog:
                 lignes_erreur += 1
                 continue
 
-            _archive_file(client, ftp_path, filename)
-
-        if hasattr(client, "close"):
-            client.close()
-        if ssh:
-            ssh.close()
+            _archive_file(ftp_path, filename)
 
         log.statut = StatutImport.succes
         log.lignes_traitees = lignes_traitees
@@ -194,11 +209,11 @@ async def import_receptions(db: AsyncSession) -> ImportLog:
     return log
 
 
-def _archive_file(client, ftp_path: str, filename: str):
+def _archive_file(ftp_path: str, filename: str):
     now = datetime.now(timezone.utc)
     archive_dir = f"{ftp_path}/archive/{now.strftime('%Y-%m')}"
     try:
-        _move_file(client, f"{ftp_path}/{filename}", archive_dir, filename)
+        _move_file(f"{ftp_path}/{filename}", archive_dir, filename)
     except Exception as e:
         logger.warning(f"Impossible d'archiver {filename}: {e}")
 
@@ -238,8 +253,6 @@ async def _process_reception_file(
     for row in rows:
         if not row or not any(row):
             continue
-        # Colonnes : Société, Code fournisseur, Fournisseur, Réf interne,
-        #            Réf fournisseur, Désignation, Quantité attendue
         try:
             reference_interne = str(row[3]).strip() if row[3] else None
             reference_fournisseur = str(row[4]).strip() if len(row) > 4 and row[4] else None
@@ -289,28 +302,18 @@ async def import_codes_barres(db: AsyncSession) -> ImportLog:
         return log
 
     try:
-        client, ssh = _get_ftp_client()
         ftp_path = settings.FTP_PATH_CODES_BARRES
+        files = [f for f in _list_files(ftp_path) if f.lower().endswith(".xlsx")]
 
-        files = [f for f in _list_files(client, ftp_path) if f.lower().endswith(".xlsx")]
         if not files:
             log.statut = StatutImport.succes
             log.message_erreur = "Aucun fichier codes-barres trouvé"
             log.ended_at = datetime.now(timezone.utc)
-            if hasattr(client, "close"):
-                client.close()
-            if ssh:
-                ssh.close()
             return log
 
         filename = files[-1]
         log.fichier_nom = filename
-        content = _read_file(client, f"{ftp_path}/{filename}")
-
-        if hasattr(client, "close"):
-            client.close()
-        if ssh:
-            ssh.close()
+        content = _read_file(f"{ftp_path}/{filename}")
 
         nb_traites, nb_erreurs = await _process_codes_barres_file(db, content)
         log.statut = StatutImport.succes
@@ -331,7 +334,6 @@ async def _process_codes_barres_file(db: AsyncSession, content: bytes) -> tuple[
     ws = wb.active
 
     file_data: dict[str, list[str]] = {}
-    nb_erreurs = 0
 
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row or not row[0] or not row[1]:
@@ -344,11 +346,11 @@ async def _process_codes_barres_file(db: AsyncSession, content: bytes) -> tuple[
     all_file_codes = {code for codes in file_data.values() for code in codes}
 
     nb_traites = 0
+    nb_erreurs = 0
     for ref, codes in file_data.items():
         r = await db.execute(select(Article).where(Article.reference_interne == ref))
         article = r.scalar_one_or_none()
         if not article:
-            # L'article n'existe pas encore : on le crée avec la référence comme désignation provisoire
             article = Article(reference_interne=ref, designation=ref)
             db.add(article)
             await db.flush()
@@ -374,8 +376,7 @@ async def _process_codes_barres_file(db: AsyncSession, content: bytes) -> tuple[
     r = await db.execute(
         select(CodeBarre).where(CodeBarre.source == SourceCodeBarre.import_)
     )
-    codes_import = r.scalars().all()
-    for cb in codes_import:
+    for cb in r.scalars().all():
         if cb.code not in all_file_codes:
             await db.delete(cb)
 
