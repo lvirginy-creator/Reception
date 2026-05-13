@@ -68,7 +68,6 @@ async def list_receptions(
 ):
     q = select(Reception).options(selectinload(Reception.lignes))
 
-    # Isolation multi-tenant
     if current_user.role in (RoleUtilisateur.magasinier, RoleUtilisateur.responsable):
         q = q.where(Reception.magasin_id == current_user.magasin_id)
 
@@ -230,7 +229,6 @@ async def terminer_saisie(
     if reception.statut != StatutReception.en_cours:
         raise HTTPException(status_code=400, detail="Statut invalide pour cette action")
 
-    # Toutes les lignes doivent avoir une quantité saisie (0 inclus)
     non_saisies = [l for l in reception.lignes if l.quantite_recue is None]
     if non_saisies:
         raise HTTPException(
@@ -276,12 +274,15 @@ async def valider_reception(
     reception.valide_par_user_id = current_user.id
     reception.valide_le = datetime.now(timezone.utc)
 
-    await db.flush()
+    # Commit explicite avant le background task pour libérer le verrou sur la ligne.
+    # Sans ça, run_post_validation ouvre une nouvelle session qui bloque sur la même ligne.
+    out = _to_out(reception)
+    await db.commit()
 
     from app.tasks.post_validation import run_post_validation
     background_tasks.add_task(run_post_validation, reception_id)
 
-    return _to_out(reception)
+    return out
 
 
 @router.get("/{reception_id}/pdf")
