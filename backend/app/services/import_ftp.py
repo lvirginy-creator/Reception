@@ -348,9 +348,11 @@ async def _process_codes_barres_file(db: AsyncSession, content: bytes) -> tuple[
         r = await db.execute(select(Article).where(Article.reference_interne == ref))
         article = r.scalar_one_or_none()
         if not article:
-            logger.debug(f"Article {ref} inconnu, ignoré pour les codes-barres")
-            nb_erreurs += 1
-            continue
+            # L'article n'existe pas encore : on le crée avec la référence comme désignation provisoire
+            article = Article(reference_interne=ref, designation=ref)
+            db.add(article)
+            await db.flush()
+            logger.info(f"Article {ref} créé automatiquement via import codes-barres")
 
         for code in codes:
             r2 = await db.execute(select(CodeBarre).where(CodeBarre.code == code))
