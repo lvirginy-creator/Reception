@@ -15,7 +15,8 @@ type Modal =
   | { type: "camera" }
   | { type: "search"; barcode?: string }
   | { type: "hors-commande"; prefill?: { article: Article; barcode: string } }
-  | { type: "photo"; ligneId: number };
+  | { type: "photo"; ligneId: number }
+  | { type: "quantity"; ligne: Ligne };
 
 export default function Saisie() {
   const { id } = useParams<{ id: string }>();
@@ -39,7 +40,6 @@ export default function Saisie() {
     reception?.statut === "envoye" ||
     reception?.statut === "archive";
 
-  // Chargement initial
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -68,7 +68,6 @@ export default function Saisie() {
     })();
   }, [receptionId, online]);
 
-  // Sauvegarder une ligne (online → API, offline → IndexedDB)
   const saveLigne = useCallback(
     async (ligneId: number, quantite_recue: number | null, commentaire?: string) => {
       setSaving(ligneId);
@@ -84,7 +83,6 @@ export default function Saisie() {
         if (online) {
           await receptionsApi.updateLigne(receptionId, ligneId, { quantite_recue: quantite_recue ?? undefined, commentaire });
         } else {
-          // Stocker dans la file offline
           const existing = await db.pending_updates
             .where({ reception_id: receptionId })
             .filter((u) => u.ligne_id === ligneId)
@@ -102,7 +100,6 @@ export default function Saisie() {
           }
         }
 
-        // Mettre à jour le cache IndexedDB
         const cached = await db.receptions.get(receptionId);
         if (cached) {
           const updatedLignes = ((cached as any).lignes ?? []).map((l: Ligne) =>
@@ -117,28 +114,24 @@ export default function Saisie() {
     [online, receptionId]
   );
 
-  // Gestion scan code-barres (douchette HID)
   const handleScan = useCallback(
     async (code: string) => {
       try {
         const article = await articlesApi.getByBarcode(code);
-        // Chercher la ligne correspondante dans la réception
         const ligne = lignes.find((l) => l.reference_interne === article.reference_interne);
         if (ligne) {
-          // Focus sur la ligne et ouvrir le clavier
-          setActiveLigneId(ligne.id);
+          // Ouvrir la modale de saisie quantité directement
           setHighlightId(ligne.id);
           setTimeout(() => setHighlightId(null), 1500);
           const el = ligneRefs.current.get(ligne.id);
           el?.scrollIntoView({ behavior: "smooth", block: "center" });
+          setModal({ type: "quantity", ligne });
           return;
         }
-        // Article connu mais pas dans le bordereau → propose ajout hors commande
         const artObj: Article = { id: article.id, reference_interne: article.reference_interne, designation: article.designation };
         setModal({ type: "hors-commande", prefill: { article: artObj, barcode: code } });
       } catch (e: any) {
         if (e.response?.status === 404) {
-          // Code inconnu → associer à un article
           setModal({ type: "search", barcode: code });
         }
       }
@@ -158,7 +151,6 @@ export default function Saisie() {
     setError("");
     try {
       if (!online) {
-        // Envoyer d'abord la file en attente
         await syncApi.push([{
           reception_id: receptionId,
           lignes: lignes.map((l) => ({
@@ -214,11 +206,7 @@ export default function Saisie() {
   if (!reception) return <Layout><div style={{ padding: 40, textAlign: "center", color: "#888" }}>Réception introuvable</div></Layout>;
 
   return (
-    <Layout
-      title={`EN ${reception.numero_en}`}
-      backTo="/receptions"
-    >
-      {/* En-tête réception */}
+    <Layout title={`EN ${reception.numero_en}`} backTo="/receptions">
       <div style={styles.recapCard}>
         <div style={styles.fournisseur}>{reception.fournisseur_nom}</div>
         <div style={styles.metaRow}>
@@ -230,24 +218,16 @@ export default function Saisie() {
         </div>
       </div>
 
-      {/* Boutons actions */}
       {!isReadonly && (
         <div style={styles.actionsRow}>
-          <button style={styles.btnCamera} onClick={() => setModal({ type: "camera" })}>
-            📷 Caméra
-          </button>
-          <button style={styles.btnSearch} onClick={() => setModal({ type: "search" })}>
-            🔍 Recherche
-          </button>
-          <button style={styles.btnHorsCommande} onClick={() => setModal({ type: "hors-commande" })}>
-            + Hors commande
-          </button>
+          <button style={styles.btnCamera} onClick={() => setModal({ type: "camera" })}>📷 Caméra</button>
+          <button style={styles.btnSearch} onClick={() => setModal({ type: "search" })}>🔍 Recherche</button>
+          <button style={styles.btnHorsCommande} onClick={() => setModal({ type: "hors-commande" })}>+ Hors commande</button>
         </div>
       )}
 
       {error && <div style={styles.errorBanner}>{error}</div>}
 
-      {/* Liste des lignes */}
       <div style={styles.lignesList}>
         {lignes.map((l) => (
           <LigneRow
@@ -266,7 +246,6 @@ export default function Saisie() {
         ))}
       </div>
 
-      {/* Bouton terminer */}
       {!isReadonly && reception.statut === "en_cours" && (
         <div style={styles.terminerBar}>
           <button
@@ -283,7 +262,20 @@ export default function Saisie() {
         <div style={styles.preteBar}>✓ Saisie terminée — en attente de validation responsable</div>
       )}
 
-      {/* Modals */}
+      {/* Modale quantité post-scan */}
+      {modal?.type === "quantity" && (
+        <QuantityScanModal
+          ligne={modal.ligne}
+          saisieAveugle={reception.saisie_aveugle}
+          onConfirm={(qty, comment) => {
+            saveLigne(modal.ligne.id, qty, comment);
+            setLignes((prev) => prev.map((l) => l.id === modal.ligne.id ? { ...l, quantite_recue: qty } : l));
+            setModal(null);
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
+
       {modal?.type === "camera" && (
         <CameraScanner
           onScan={(code) => { setModal(null); handleScan(code); }}
@@ -299,14 +291,14 @@ export default function Saisie() {
             if (barcode) {
               const ligne = lignes.find((l) => l.reference_interne === article.reference_interne);
               if (ligne) {
-                setActiveLigneId(ligne.id);
+                setModal({ type: "quantity", ligne });
               } else {
                 setModal({ type: "hors-commande", prefill: { article, barcode } });
               }
             } else {
               const ligne = lignes.find((l) => l.reference_interne === article.reference_interne);
               if (ligne) {
-                setActiveLigneId(ligne.id);
+                setModal({ type: "quantity", ligne });
                 ligneRefs.current.get(ligne.id)?.scrollIntoView({ behavior: "smooth", block: "center" });
               }
             }
@@ -352,6 +344,114 @@ export default function Saisie() {
   );
 }
 
+// --- Modale saisie quantité après scan ---
+function QuantityScanModal({
+  ligne,
+  saisieAveugle,
+  onConfirm,
+  onClose,
+}: {
+  ligne: Ligne;
+  saisieAveugle: boolean;
+  onConfirm: (qty: number | null, comment?: string) => void;
+  onClose: () => void;
+}) {
+  const [qty, setQty] = useState(ligne.quantite_recue?.toString() ?? "");
+  const [comment, setComment] = useState(ligne.commentaire ?? "");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Délai léger pour laisser le DOM se stabiliser avant le focus
+    const t = setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 80);
+    return () => clearTimeout(t);
+  }, []);
+
+  const confirm = () => {
+    const parsed = qty === "" ? null : parseInt(qty, 10);
+    onConfirm(isNaN(parsed as number) ? null : parsed, comment || undefined);
+  };
+
+  return (
+    <div style={qStyles.overlay} onClick={onClose}>
+      <div style={qStyles.card} onClick={(e) => e.stopPropagation()}>
+        <div style={qStyles.header}>
+          <div>
+            <span style={qStyles.ref}>{ligne.reference_interne}</span>
+            {ligne.reference_fournisseur && <span style={qStyles.refFourn}> · {ligne.reference_fournisseur}</span>}
+          </div>
+          <button style={qStyles.closeBtn} onClick={onClose}>✕</button>
+        </div>
+
+        <div style={qStyles.designation}>{ligne.designation}</div>
+
+        {!saisieAveugle && ligne.quantite_attendue !== null && (
+          <div style={qStyles.attendu}>Quantité attendue : <strong>{ligne.quantite_attendue}</strong></div>
+        )}
+
+        <div style={qStyles.inputLabel}>Quantité reçue</div>
+        <input
+          ref={inputRef}
+          type="number"
+          min="0"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") confirm(); if (e.key === "Escape") onClose(); }}
+          style={qStyles.input}
+          inputMode="numeric"
+          placeholder="0"
+        />
+
+        <textarea
+          style={qStyles.comment}
+          placeholder="Commentaire (optionnel)…"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          rows={2}
+        />
+
+        <div style={qStyles.btnRow}>
+          <button style={qStyles.btnCancel} onClick={onClose}>Annuler</button>
+          <button style={qStyles.btnConfirm} onClick={confirm}>✓ Valider</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const qStyles: Record<string, React.CSSProperties> = {
+  overlay: {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,.6)",
+    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 900,
+  },
+  card: {
+    background: "#fff", borderRadius: 16, padding: "20px 20px 16px",
+    width: "min(380px, 95vw)", boxShadow: "0 8px 32px rgba(0,0,0,.25)",
+  },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
+  ref: { fontWeight: 700, fontSize: 13, color: "#1a3a6b", background: "#eef2ff", padding: "2px 8px", borderRadius: 5 },
+  refFourn: { fontSize: 12, color: "#888" },
+  closeBtn: { background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#888", lineHeight: 1 },
+  designation: { fontSize: 16, fontWeight: 600, color: "#222", marginBottom: 12, lineHeight: 1.3 },
+  attendu: { fontSize: 13, color: "#555", marginBottom: 12, background: "#f0f4f8", padding: "6px 10px", borderRadius: 8 },
+  inputLabel: { fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 },
+  input: {
+    width: "100%", fontSize: 32, fontWeight: 700, textAlign: "center",
+    padding: "10px 8px", borderRadius: 10, border: "2px solid #1a3a6b",
+    background: "#f8f9fc", marginBottom: 12, boxSizing: "border-box",
+  },
+  comment: {
+    width: "100%", borderRadius: 8, border: "1px solid #ddd",
+    padding: "8px 10px", fontSize: 14, resize: "none", marginBottom: 14,
+    fontFamily: "inherit", boxSizing: "border-box",
+  },
+  btnRow: { display: "flex", gap: 10 },
+  btnCancel: { flex: 1, padding: "12px 0", borderRadius: 10, border: "1px solid #ddd", background: "#f5f5f5", fontSize: 15, cursor: "pointer", fontWeight: 600 },
+  btnConfirm: { flex: 2, padding: "12px 0", borderRadius: 10, border: "none", background: "#1a3a6b", color: "#fff", fontSize: 15, cursor: "pointer", fontWeight: 700 },
+};
+
 // --- Composant d'une ligne de réception ---
 interface LigneRowProps {
   ligne: Ligne;
@@ -389,13 +489,10 @@ function LigneRow({ ligne: l, saisieAveugle, active, highlighted, saving, readon
       : null;
 
   const statusColor =
-    l.quantite_recue === null
-      ? "#aaa"
-      : ecart === 0
-      ? "#27ae60"
-      : ecart! < 0
-      ? "#c0392b"
-      : "#e67e22";
+    l.quantite_recue === null ? "#aaa"
+    : ecart === 0 ? "#27ae60"
+    : ecart! < 0 ? "#c0392b"
+    : "#e67e22";
 
   const handleBlur = () => {
     const parsed = qty === "" ? null : parseInt(qty, 10);
@@ -415,7 +512,6 @@ function LigneRow({ ligne: l, saisieAveugle, active, highlighted, saving, readon
       }}
       onClick={() => !active && !readonly && onActivate()}
     >
-      {/* En-tête ligne */}
       <div style={styles.ligneHeader}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <span style={styles.refTag}>{l.reference_interne}</span>
@@ -435,7 +531,6 @@ function LigneRow({ ligne: l, saisieAveugle, active, highlighted, saving, readon
 
       <div style={styles.designation}>{l.designation}</div>
 
-      {/* Quantités */}
       <div style={styles.qtysRow}>
         {!saisieAveugle && l.quantite_attendue !== null && (
           <div style={styles.qtyBox}>
@@ -482,7 +577,6 @@ function LigneRow({ ligne: l, saisieAveugle, active, highlighted, saving, readon
         {saving && <div style={styles.savingDot}>↑</div>}
       </div>
 
-      {/* Commentaire (visible si actif) */}
       {active && !readonly && (
         <textarea
           style={styles.commentArea}
@@ -541,7 +635,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "6px 4px", borderRadius: 8, border: "2px solid #ddd",
     lineHeight: 1, background: "#f8f9fc",
   },
-  savingDot: { color: "#888", fontSize: 20, animation: "spin 1s linear infinite" },
+  savingDot: { color: "#888", fontSize: 20 },
 
   commentArea: {
     width: "100%", marginTop: 8, borderRadius: 8, border: "1px solid #ddd",
