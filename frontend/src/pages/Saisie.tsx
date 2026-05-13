@@ -294,7 +294,14 @@ export default function Saisie() {
   );
 }
 
-// --- Modale saisie quantité (scan ou tap) ---
+// --- Modale saisie quantité avec pavé numérique ---
+const KEYPAD_ROWS = [
+  ["7", "8", "9"],
+  ["4", "5", "6"],
+  ["1", "2", "3"],
+  ["C", "0", "⌫"],
+];
+
 function QuantityScanModal({
   ligne, saisieAveugle, onConfirm, onClose,
 }: {
@@ -302,43 +309,92 @@ function QuantityScanModal({
   onConfirm: (qty: number | null, comment?: string) => void;
   onClose: () => void;
 }) {
-  const [qty, setQty] = useState(ligne.quantite_recue?.toString() ?? "");
+  const [qty, setQty] = useState(ligne.quantite_recue !== null ? String(ligne.quantite_recue) : "");
   const [comment, setComment] = useState(ligne.commentaire ?? "");
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const t = setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 80);
-    return () => clearTimeout(t);
-  }, []);
+  const pressKey = (key: string) => {
+    if (key === "C") { setQty(""); return; }
+    if (key === "⌫") { setQty((p) => p.slice(0, -1)); return; }
+    setQty((p) => {
+      if (p === "0") return key;
+      if (p.length >= 5) return p;
+      return p + key;
+    });
+  };
 
   const confirm = () => {
     const parsed = qty === "" ? null : parseInt(qty, 10);
-    onConfirm(isNaN(parsed as number) ? null : parsed, comment || undefined);
+    onConfirm(Number.isNaN(parsed as number) ? null : parsed, comment || undefined);
   };
+
+  const qtyNum = qty === "" ? null : parseInt(qty, 10);
+  const ecart =
+    !saisieAveugle && ligne.quantite_attendue !== null && qtyNum !== null
+      ? qtyNum - ligne.quantite_attendue
+      : null;
+  const ecartColor = ecart === null ? "#aaa" : ecart === 0 ? "#27ae60" : ecart < 0 ? "#c0392b" : "#e67e22";
 
   return (
     <div style={qStyles.overlay} onClick={onClose}>
       <div style={qStyles.card} onClick={(e) => e.stopPropagation()}>
+        {/* En-tête */}
         <div style={qStyles.header}>
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <span style={qStyles.ref}>{ligne.reference_interne}</span>
             {ligne.reference_fournisseur && <span style={qStyles.refFourn}> · {ligne.reference_fournisseur}</span>}
           </div>
           <button style={qStyles.closeBtn} onClick={onClose}>✕</button>
         </div>
         <div style={qStyles.designation}>{ligne.designation}</div>
-        {!saisieAveugle && ligne.quantite_attendue !== null && (
-          <div style={qStyles.attendu}>Quantité attendue : <strong>{ligne.quantite_attendue}</strong></div>
-        )}
-        <div style={qStyles.inputLabel}>Quantité reçue</div>
-        <input
-          ref={inputRef}
-          type="number" min="0" value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") confirm(); if (e.key === "Escape") onClose(); }}
-          style={qStyles.input}
-          inputMode="numeric" placeholder="0"
-        />
+
+        {/* Affichage quantité + écart */}
+        <div style={qStyles.displayRow}>
+          <div style={qStyles.displayBox}>
+            <div style={qStyles.displayLabel}>Reçu</div>
+            <div style={qStyles.displayValue}>
+              {qty === "" ? <span style={{ color: "#ccc" }}>—</span> : qty}
+            </div>
+          </div>
+          {!saisieAveugle && ligne.quantite_attendue !== null && (
+            <div style={qStyles.displayBox}>
+              <div style={qStyles.displayLabel}>Attendu</div>
+              <div style={{ ...qStyles.displayValue, fontSize: 22, color: "#555" }}>
+                {ligne.quantite_attendue}
+              </div>
+            </div>
+          )}
+          {ecart !== null && (
+            <div style={qStyles.displayBox}>
+              <div style={qStyles.displayLabel}>Écart</div>
+              <div style={{ ...qStyles.displayValue, fontSize: 22, color: ecartColor, fontWeight: 700 }}>
+                {ecart > 0 ? `+${ecart}` : ecart}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Pavé numérique */}
+        <div style={qStyles.keypad}>
+          {KEYPAD_ROWS.map((row, ri) => (
+            <div key={ri} style={qStyles.keyRow}>
+              {row.map((k) => (
+                <button
+                  key={k}
+                  style={{
+                    ...qStyles.key,
+                    ...(k === "C" ? qStyles.keyC : {}),
+                    ...(k === "⌫" ? qStyles.keyDel : {}),
+                  }}
+                  onPointerDown={(e) => { e.preventDefault(); pressKey(k); }}
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Commentaire */}
         <textarea
           style={qStyles.comment}
           placeholder="Commentaire (optionnel)…"
@@ -346,6 +402,8 @@ function QuantityScanModal({
           onChange={(e) => setComment(e.target.value)}
           rows={2}
         />
+
+        {/* Boutons */}
         <div style={qStyles.btnRow}>
           <button style={qStyles.btnCancel} onClick={onClose}>Annuler</button>
           <button style={qStyles.btnConfirm} onClick={confirm}>✓ Valider</button>
@@ -357,19 +415,33 @@ function QuantityScanModal({
 
 const qStyles: Record<string, React.CSSProperties> = {
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 900 },
-  card: { background: "#fff", borderRadius: 16, padding: "20px 20px 16px", width: "min(380px, 95vw)", boxShadow: "0 8px 32px rgba(0,0,0,.25)" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 },
+  card: { background: "#fff", borderRadius: 16, padding: "16px 16px 14px", width: "min(400px, 97vw)", boxShadow: "0 8px 32px rgba(0,0,0,.25)", maxHeight: "95vh", overflowY: "auto" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 },
   ref: { fontWeight: 700, fontSize: 13, color: "#1a3a6b", background: "#eef2ff", padding: "2px 8px", borderRadius: 5 },
   refFourn: { fontSize: 12, color: "#888" },
-  closeBtn: { background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#888", lineHeight: 1 },
-  designation: { fontSize: 16, fontWeight: 600, color: "#222", marginBottom: 12, lineHeight: 1.3 },
-  attendu: { fontSize: 13, color: "#555", marginBottom: 12, background: "#f0f4f8", padding: "6px 10px", borderRadius: 8 },
-  inputLabel: { fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 },
-  input: { width: "100%", fontSize: 32, fontWeight: 700, textAlign: "center", padding: "10px 8px", borderRadius: 10, border: "2px solid #1a3a6b", background: "#f8f9fc", marginBottom: 12, boxSizing: "border-box" },
-  comment: { width: "100%", borderRadius: 8, border: "1px solid #ddd", padding: "8px 10px", fontSize: 14, resize: "none", marginBottom: 14, fontFamily: "inherit", boxSizing: "border-box" },
+  closeBtn: { background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#888", lineHeight: 1, flexShrink: 0 },
+  designation: { fontSize: 15, fontWeight: 600, color: "#222", marginBottom: 12, lineHeight: 1.3 },
+  displayRow: { display: "flex", gap: 8, marginBottom: 14, justifyContent: "center" },
+  displayBox: { flex: 1, background: "#f0f4f8", borderRadius: 10, padding: "8px 6px", textAlign: "center" },
+  displayLabel: { fontSize: 10, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 },
+  displayValue: { fontSize: 32, fontWeight: 800, lineHeight: 1, color: "#1a3a6b" },
+  keypad: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 },
+  keyRow: { display: "flex", gap: 8 },
+  key: {
+    flex: 1, height: 56, fontSize: 22, fontWeight: 700,
+    borderRadius: 10, border: "1px solid #e0e0e0",
+    background: "#f8f9fc", color: "#222",
+    cursor: "pointer", userSelect: "none",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "manipulation",
+  },
+  keyC: { background: "#fff0f0", color: "#c0392b", border: "1px solid #f5c6c6" },
+  keyDel: { background: "#fff8f0", color: "#c07800", border: "1px solid #f5dfa0", fontSize: 18 },
+  comment: { width: "100%", borderRadius: 8, border: "1px solid #ddd", padding: "8px 10px", fontSize: 14, resize: "none", marginBottom: 12, fontFamily: "inherit", boxSizing: "border-box" },
   btnRow: { display: "flex", gap: 10 },
-  btnCancel: { flex: 1, padding: "12px 0", borderRadius: 10, border: "1px solid #ddd", background: "#f5f5f5", fontSize: 15, cursor: "pointer", fontWeight: 600 },
-  btnConfirm: { flex: 2, padding: "12px 0", borderRadius: 10, border: "none", background: "#1a3a6b", color: "#fff", fontSize: 15, cursor: "pointer", fontWeight: 700 },
+  btnCancel: { flex: 1, padding: "13px 0", borderRadius: 10, border: "1px solid #ddd", background: "#f5f5f5", fontSize: 15, cursor: "pointer", fontWeight: 600 },
+  btnConfirm: { flex: 2, padding: "13px 0", borderRadius: 10, border: "none", background: "#1a3a6b", color: "#fff", fontSize: 15, cursor: "pointer", fontWeight: 700 },
 };
 
 // --- Composant ligne ---
@@ -381,6 +453,9 @@ interface LigneRowProps {
 }
 
 function LigneRow({ ligne: l, saisieAveugle, highlighted, saving, readonly, onTap, onPhoto, ref_ }: LigneRowProps) {
+  const touchStartY = useRef(0);
+  const touchMoved = useRef(false);
+
   const ecart = l.quantite_attendue !== null && l.quantite_recue !== null
     ? l.quantite_recue - l.quantite_attendue : null;
 
@@ -391,7 +466,22 @@ function LigneRow({ ligne: l, saisieAveugle, highlighted, saving, readonly, onTa
     <div
       ref={(el) => el ? ref_.current.set(l.id, el) : ref_.current.delete(l.id)}
       style={{ ...styles.ligneCard, borderLeftColor: statusColor, background: highlighted ? "#fffbe6" : "#fff", transition: "background .4s" }}
-      onClick={() => !readonly && onTap()}
+      onTouchStart={(e) => {
+        touchStartY.current = e.touches[0].clientY;
+        touchMoved.current = false;
+      }}
+      onTouchMove={(e) => {
+        if (Math.abs(e.touches[0].clientY - touchStartY.current) > 8) {
+          touchMoved.current = true;
+        }
+      }}
+      onTouchEnd={(e) => {
+        if (!touchMoved.current && !readonly) {
+          e.preventDefault();
+          onTap();
+        }
+      }}
+      onClick={() => { if (!readonly) onTap(); }}
     >
       <div style={styles.ligneHeader}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -417,8 +507,8 @@ function LigneRow({ ligne: l, saisieAveugle, highlighted, saving, readonly, onTa
         )}
         <div style={{ ...styles.qtyBox, flex: 1 }}>
           <div style={styles.qtyLabel}>Reçu</div>
-          <div style={{ ...styles.qtyValue, color: statusColor, fontSize: l.quantite_recue === null ? 16 : 22 }}>
-            {l.quantite_recue ?? <span style={{ color: "#ccc" }}>— appuyer pour saisir</span>}
+          <div style={{ ...styles.qtyValue, color: statusColor, fontSize: l.quantite_recue === null ? 14 : 22 }}>
+            {l.quantite_recue ?? <span style={{ color: "#bbb", fontStyle: "italic" }}>appuyer pour saisir</span>}
           </div>
         </div>
         {ecart !== null && (
@@ -448,8 +538,14 @@ const styles: Record<string, React.CSSProperties> = {
   btnSearch: { flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #ccc", background: "#f0f4f8", cursor: "pointer", fontSize: 14, fontWeight: 600 },
   btnHorsCommande: { flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #f39c12", background: "#fff9f0", color: "#c07800", cursor: "pointer", fontSize: 13, fontWeight: 600 },
   errorBanner: { background: "#fde8e8", color: "#c0392b", borderRadius: 8, padding: "10px 14px", marginBottom: 10, fontSize: 14 },
-  lignesList: { display: "flex", flexDirection: "column", gap: 8 },
-  ligneCard: { background: "#fff", borderRadius: 12, padding: "12px 14px", borderLeft: "5px solid #aaa", boxShadow: "0 1px 3px rgba(0,0,0,.08)", cursor: "pointer" },
+  lignesList: { display: "flex", flexDirection: "column", gap: 8, paddingBottom: 80 },
+  ligneCard: {
+    background: "#fff", borderRadius: 12, padding: "12px 14px",
+    borderLeft: "5px solid #aaa", boxShadow: "0 1px 3px rgba(0,0,0,.08)",
+    cursor: "pointer", userSelect: "none",
+    WebkitTapHighlightColor: "transparent",
+    touchAction: "pan-y",
+  },
   ligneHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 },
   refTag: { fontWeight: 700, fontSize: 12, color: "#1a3a6b", background: "#eef2ff", padding: "2px 6px", borderRadius: 5 },
   refFourn: { fontSize: 11, color: "#888" },
