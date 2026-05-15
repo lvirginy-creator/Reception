@@ -41,11 +41,16 @@ async def run_post_validation(reception_id: int):
                 else "Inconnu"
             )
 
-            # Collecter les nouveaux codes-barres (ajout_terrain) de cette réception
+            # Collecter les nouveaux codes-barres (ajout_terrain) de cette réception.
+            # On charge created_by en eager pour éviter le lazy-load interdit en async.
             nouveaux_codes: list[dict] = []
             for ligne in reception.lignes:
+                if ligne.article_id is None:
+                    # Ligne hors commande sans article associé en base
+                    continue
                 r = await db.execute(
                     select(CodeBarre)
+                    .options(selectinload(CodeBarre.created_by))
                     .where(
                         CodeBarre.article_id == ligne.article_id,
                         CodeBarre.source == SourceCodeBarre.ajout_terrain,
@@ -80,4 +85,4 @@ async def run_post_validation(reception_id: int):
 
         except Exception as e:
             await db.rollback()
-            logger.error(f"post_validation erreur pour réception {reception_id}: {e}")
+            logger.exception(f"post_validation erreur pour réception {reception_id}: {e}")
