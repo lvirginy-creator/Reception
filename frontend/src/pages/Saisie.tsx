@@ -8,6 +8,7 @@ import AjoutHorsCommande from "../components/AjoutHorsCommande";
 import { receptionsApi, type Ligne, type ReceptionDetail } from "../api/receptions";
 import { articlesApi, type Article } from "../api/articles";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
+import { useAuthStore } from "../store/authStore";
 import { db } from "../db/database";
 import { syncApi } from "../api/sync";
 
@@ -23,11 +24,14 @@ export default function Saisie() {
   const receptionId = Number(id);
   const navigate = useNavigate();
   const online = useOnlineStatus();
+  const user = useAuthStore((s) => s.user);
+  const isResponsable = user?.role === "responsable" || user?.role === "admin";
 
   const [reception, setReception] = useState<ReceptionDetail | null>(null);
   const [lignes, setLignes] = useState<Ligne[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<number | null>(null);
+  const [toggling, setToggling] = useState(false);
   const [modal, setModal] = useState<Modal | null>(null);
   const [error, setError] = useState("");
   const [terminerLoading, setTerminerLoading] = useState(false);
@@ -66,6 +70,17 @@ export default function Saisie() {
       }
     })();
   }, [receptionId, online]);
+
+  const handleToggleAveugle = async () => {
+    if (!reception || toggling) return;
+    setToggling(true);
+    try {
+      await receptionsApi.toggleSaisieAveugle(receptionId, !reception.saisie_aveugle);
+      setReception((r) => r ? { ...r, saisie_aveugle: !r.saisie_aveugle } : r);
+    } finally {
+      setToggling(false);
+    }
+  };
 
   const saveLigne = useCallback(
     async (ligneId: number, quantite_recue: number | null, commentaire?: string) => {
@@ -188,6 +203,7 @@ export default function Saisie() {
 
   return (
     <Layout title={`EN ${reception.numero_en}`} backTo="/receptions">
+      {/* Carte récap */}
       <div style={styles.recapCard}>
         <div style={styles.fournisseur}>{reception.fournisseur_nom}</div>
         <div style={styles.metaRow}>
@@ -195,6 +211,33 @@ export default function Saisie() {
           <span style={styles.metaItem}>{nbSaisies}/{lignes.length} lignes saisies</span>
         </div>
         <div style={styles.progressBar}><div style={{ ...styles.progressFill, width: `${pct}%` }} /></div>
+
+        {/* Toggle aveugle — responsable uniquement, tant que non readonly */}
+        {isResponsable && !isReadonly && (
+          <div style={styles.toggleRow}>
+            <span style={styles.toggleLabel}>
+              Saisie à l'aveugle
+              <span style={{ fontWeight: 400, color: "#999", fontSize: 11, marginLeft: 6 }}>
+                ({reception.saisie_aveugle ? "activée" : "désactivée"})
+              </span>
+            </span>
+            <button
+              style={{
+                ...styles.toggle,
+                background: reception.saisie_aveugle ? "#8e44ad" : "#ccc",
+                opacity: toggling ? 0.6 : 1,
+              }}
+              onClick={handleToggleAveugle}
+              disabled={toggling}
+              title="Basculer le mode saisie à l'aveugle"
+            >
+              <div style={{
+                ...styles.toggleKnob,
+                transform: reception.saisie_aveugle ? "translateX(22px)" : "translateX(2px)",
+              }} />
+            </button>
+          </div>
+        )}
       </div>
 
       {!isReadonly && (
@@ -337,7 +380,6 @@ function QuantityScanModal({
   return (
     <div style={qStyles.overlay} onClick={onClose}>
       <div style={qStyles.card} onClick={(e) => e.stopPropagation()}>
-        {/* En-tête */}
         <div style={qStyles.header}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <span style={qStyles.ref}>{ligne.reference_interne}</span>
@@ -347,7 +389,6 @@ function QuantityScanModal({
         </div>
         <div style={qStyles.designation}>{ligne.designation}</div>
 
-        {/* Affichage quantité + écart */}
         <div style={qStyles.displayRow}>
           <div style={qStyles.displayBox}>
             <div style={qStyles.displayLabel}>Reçu</div>
@@ -373,7 +414,6 @@ function QuantityScanModal({
           )}
         </div>
 
-        {/* Pavé numérique */}
         <div style={qStyles.keypad}>
           {KEYPAD_ROWS.map((row, ri) => (
             <div key={ri} style={qStyles.keyRow}>
@@ -394,7 +434,6 @@ function QuantityScanModal({
           ))}
         </div>
 
-        {/* Commentaire */}
         <textarea
           style={qStyles.comment}
           placeholder="Commentaire (optionnel)…"
@@ -403,7 +442,6 @@ function QuantityScanModal({
           rows={2}
         />
 
-        {/* Boutons */}
         <div style={qStyles.btnRow}>
           <button style={qStyles.btnCancel} onClick={onClose}>Annuler</button>
           <button style={qStyles.btnConfirm} onClick={confirm}>✓ Valider</button>
@@ -531,8 +569,22 @@ const styles: Record<string, React.CSSProperties> = {
   metaRow: { display: "flex", gap: 10, alignItems: "center", marginBottom: 8, flexWrap: "wrap" },
   tagAveugle: { background: "#8e44ad", color: "#fff", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 600 },
   metaItem: { fontSize: 13, color: "#555" },
-  progressBar: { height: 6, background: "#e0e0e0", borderRadius: 4, overflow: "hidden" },
+  progressBar: { height: 6, background: "#e0e0e0", borderRadius: 4, overflow: "hidden", marginBottom: 0 },
   progressFill: { height: "100%", background: "#27ae60", borderRadius: 4, transition: "width .4s" },
+  toggleRow: {
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    marginTop: 10, paddingTop: 10, borderTop: "1px solid #f0f0f0",
+  },
+  toggleLabel: { fontSize: 13, fontWeight: 600, color: "#444" },
+  toggle: {
+    width: 48, height: 26, borderRadius: 13, border: "none", cursor: "pointer",
+    position: "relative", transition: "background .2s", flexShrink: 0,
+  },
+  toggleKnob: {
+    position: "absolute", top: 2, width: 22, height: 22, borderRadius: "50%",
+    background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,.3)",
+    transition: "transform .2s",
+  },
   actionsRow: { display: "flex", gap: 8, marginBottom: 10 },
   btnCamera: { flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #ccc", background: "#f0f4f8", cursor: "pointer", fontSize: 14, fontWeight: 600 },
   btnSearch: { flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #ccc", background: "#f0f4f8", cursor: "pointer", fontSize: 14, fontWeight: 600 },
