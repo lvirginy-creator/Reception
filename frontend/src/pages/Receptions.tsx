@@ -26,6 +26,7 @@ export default function Receptions() {
   const [receptions, setReceptions] = useState<Reception[]>([]);
   const [filtreStatut, setFiltreStatut] = useState("");
   const [filtreFournisseur, setFiltreFournisseur] = useState("");
+  const [filtreEN, setFiltreEN] = useState("");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const online = useOnlineStatus();
@@ -41,11 +42,9 @@ export default function Receptions() {
           fournisseur: filtreFournisseur || undefined,
         });
         setReceptions(data);
-        // Mettre à jour IndexedDB
         const now = Date.now();
         await db.receptions.bulkPut(data.map((r) => ({ ...r, lignes: [], synced_at: now })));
       } else {
-        // Mode hors ligne : lire IndexedDB
         let all = await db.receptions.toArray();
         if (filtreStatut) all = all.filter((r) => r.statut === filtreStatut);
         if (filtreFournisseur) all = all.filter((r) =>
@@ -54,7 +53,6 @@ export default function Receptions() {
         setReceptions(all.sort((a, b) => b.numero_en.localeCompare(a.numero_en)) as Reception[]);
       }
     } catch {
-      // Fallback IndexedDB si erreur réseau
       const all = await db.receptions.toArray();
       setReceptions(all.sort((a, b) => b.numero_en.localeCompare(a.numero_en)) as Reception[]);
     } finally {
@@ -64,36 +62,53 @@ export default function Receptions() {
 
   useEffect(() => { load(); }, [online, filtreStatut, filtreFournisseur]);
 
-  const actives = receptions.filter((r) => r.statut === "en_cours" || r.statut === "prete");
-  const autres = receptions.filter((r) => r.statut !== "en_cours" && r.statut !== "prete");
+  // Filtrage EN en client-side sur les données déjà chargées
+  const filtered = filtreEN
+    ? receptions.filter((r) =>
+        r.numero_en.toLowerCase().includes(filtreEN.toLowerCase().replace(/^en\s*/i, ""))
+      )
+    : receptions;
+
+  const actives = filtered.filter((r) => r.statut === "en_cours" || r.statut === "prete");
+  const autres = filtered.filter((r) => r.statut !== "en_cours" && r.statut !== "prete");
 
   return (
     <Layout title="Mes réceptions">
       {/* Filtres */}
-      <div style={styles.filters}>
-        <select
-          style={styles.select}
-          value={filtreStatut}
-          onChange={(e) => setFiltreStatut(e.target.value)}
-        >
-          <option value="">Tous les statuts</option>
-          <option value="en_cours">En cours</option>
-          <option value="prete">Prête à valider</option>
-          <option value="valide">Validée</option>
-          <option value="envoye">Envoyée</option>
-        </select>
-        <input
-          style={styles.searchInput}
-          placeholder="Filtrer par fournisseur…"
-          value={filtreFournisseur}
-          onChange={(e) => setFiltreFournisseur(e.target.value)}
-        />
-        <button style={styles.refreshBtn} onClick={load}>↻</button>
+      <div style={styles.filtersWrap}>
+        <div style={styles.filtersRow1}>
+          <select
+            style={styles.select}
+            value={filtreStatut}
+            onChange={(e) => setFiltreStatut(e.target.value)}
+          >
+            <option value="">Tous les statuts</option>
+            <option value="en_cours">En cours</option>
+            <option value="prete">Prête à valider</option>
+            <option value="valide">Validée</option>
+            <option value="envoye">Envoyée</option>
+          </select>
+          <button style={styles.refreshBtn} onClick={load}>↻</button>
+        </div>
+        <div style={styles.filtersRow2}>
+          <input
+            style={styles.searchInput}
+            placeholder="N° EN…"
+            value={filtreEN}
+            onChange={(e) => setFiltreEN(e.target.value)}
+          />
+          <input
+            style={{ ...styles.searchInput, flex: 2 }}
+            placeholder="Fournisseur…"
+            value={filtreFournisseur}
+            onChange={(e) => setFiltreFournisseur(e.target.value)}
+          />
+        </div>
       </div>
 
       {loading && <div style={styles.loading}>Chargement…</div>}
 
-      {!loading && receptions.length === 0 && (
+      {!loading && filtered.length === 0 && (
         <div style={styles.empty}>Aucune réception pour le moment.</div>
       )}
 
@@ -151,16 +166,14 @@ function ReceptionCard({ reception: r, onClick, onValider }: { reception: Recept
 
       <div style={styles.fournisseur}>{r.fournisseur_nom}</div>
       <div style={styles.meta}>
-        Code : {r.code_fournisseur} · Importé le {new Date(r.date_import).toLocaleDateString("fr-FR")}
+        Code : {r.code_fournisseur} · Importé le {new Date(r.date_import).toLocaleDateString("fr-FR")}
         {r.saisie_aveugle && <span style={styles.tagAveugle}> · 👁 aveugle</span>}
       </div>
 
-      {/* Barre de progression */}
       <div style={styles.progressBar}>
         <div style={{ ...styles.progressFill, width: `${pct}%`, background: allSaisies ? "#27ae60" : "#2980b9" }} />
       </div>
 
-      {/* Bouton valider (responsable uniquement, statut prete) */}
       {onValider && (
         <button
           style={styles.validerBtn}
@@ -174,10 +187,12 @@ function ReceptionCard({ reception: r, onClick, onValider }: { reception: Recept
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  filters: { display: "flex", gap: 8, marginBottom: 14, alignItems: "center" },
+  filtersWrap: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 },
+  filtersRow1: { display: "flex", gap: 8, alignItems: "center" },
+  filtersRow2: { display: "flex", gap: 8 },
   select: { padding: "8px 10px", borderRadius: 8, border: "1px solid #ccc", fontSize: 14, flex: 1 },
-  searchInput: { padding: "8px 10px", borderRadius: 8, border: "1px solid #ccc", fontSize: 14, flex: 2 },
-  refreshBtn: { padding: "8px 14px", borderRadius: 8, border: "1px solid #ccc", background: "#fff", fontSize: 18, cursor: "pointer" },
+  searchInput: { flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #ccc", fontSize: 14 },
+  refreshBtn: { padding: "8px 14px", borderRadius: 8, border: "1px solid #ccc", background: "#fff", fontSize: 18, cursor: "pointer", flexShrink: 0 },
   loading: { textAlign: "center", padding: 40, color: "#888" },
   empty: { textAlign: "center", padding: 60, color: "#aaa", fontSize: 16 },
   sectionLabel: { fontWeight: 700, color: "#1a3a6b", fontSize: 13, textTransform: "uppercase", letterSpacing: 1, margin: "16px 0 6px" },
