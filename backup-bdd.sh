@@ -10,31 +10,43 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKUP_DIR="${BACKUP_DIR:-/opt/reception/backups}"
 RETENTION_DAYS=${RETENTION_DAYS:-30}
-COMPOSE_PROJECT="reception"   # nom du projet docker-compose (dossier parent)
 
 # Charger les variables d'environnement depuis .env
 if [ -f "${PROJECT_DIR}/.env" ]; then
-    # shellcheck disable=SC1091
     set -a; source "${PROJECT_DIR}/.env"; set +a
 fi
 
 PGUSER="${POSTGRES_USER:-reception}"
 PGDB="${POSTGRES_DB:-reception_db}"
 
+# --- Trouver le conteneur PostgreSQL ---
+DB_CONTAINER=$(docker ps --filter "name=db" --filter "status=running" --format "{{.Names}}" | head -1)
+
+if [ -z "${DB_CONTAINER}" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERREUR : aucun conteneur PostgreSQL trouvé (docker ps --filter name=db)"
+    exit 1
+fi
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Conteneur cible : ${DB_CONTAINER}"
+
 # --- Préparation ---
 mkdir -p "${BACKUP_DIR}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 FILE="${BACKUP_DIR}/reception_${TIMESTAMP}.sql.gz"
+TMP_FILE="${FILE}.tmp"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Début sauvegarde -> ${FILE}"
 
-# --- Dump ---
-docker compose -f "${PROJECT_DIR}/docker-compose.yml" exec -T db \
-    pg_dump -U "${PGUSER}" "${PGDB}" \
-    | gzip > "${FILE}"
-
-SIZE=$(du -sh "${FILE}" | cut -f1)
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sauvegarde terminée : ${FILE} (${SIZE})"
+# --- Dump (fichier temporaire pour éviter un .gz vide en cas d'erreur) ---
+if docker exec "${DB_CONTAINER}" pg_dump -U "${PGUSER}" "${PGDB}" | gzip > "${TMP_FILE}"; then
+    mv "${TMP_FILE}" "${FILE}"
+    SIZE=$(du -sh "${FILE}" | cut -f1)
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sauvegarde terminée : ${FILE} (${SIZE})"
+else
+    rm -f "${TMP_FILE}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERREUR : pg_dump a échoué, fichier supprimé"
+    exit 1
+fi
 
 # --- Rotation : suppression des fichiers de plus de RETENTION_DAYS jours ---
 NB_DELETED=$(find "${BACKUP_DIR}" -maxdepth 1 -name 'reception_*.sql.gz' \
