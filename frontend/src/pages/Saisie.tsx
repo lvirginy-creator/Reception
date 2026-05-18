@@ -282,6 +282,7 @@ export default function Saisie() {
       {modal?.type === "search" && (
         <ArticleSearchModal
           unknownBarcode={modal.barcode}
+          localLines={lignes}
           title={modal.barcode ? "Code-barres inconnu" : "Recherche article"}
           onSelect={(article, barcode) => {
             setModal(null);
@@ -493,7 +494,6 @@ function LigneRow({ ligne: l, saisieAveugle, highlighted, saving, readonly, onTa
           {l.ajout_hors_commande && <span style={styles.tagHC}>HORS COMMANDE</span>}
         </div>
         <div style={styles.ligneActions}>
-          {/* stopPropagation sur touchEnd ET click pour éviter que le onTouchEnd du parent ouvre la modale quantité */}
           <button
             style={styles.iconBtn}
             onTouchEnd={(e) => { e.stopPropagation(); }}
