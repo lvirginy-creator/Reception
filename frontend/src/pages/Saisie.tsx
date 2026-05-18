@@ -203,7 +203,6 @@ export default function Saisie() {
 
   return (
     <Layout title={`EN ${reception.numero_en}`} backTo="/receptions">
-      {/* Carte récap */}
       <div style={styles.recapCard}>
         <div style={styles.fournisseur}>{reception.fournisseur_nom}</div>
         <div style={styles.metaRow}>
@@ -212,7 +211,6 @@ export default function Saisie() {
         </div>
         <div style={styles.progressBar}><div style={{ ...styles.progressFill, width: `${pct}%` }} /></div>
 
-        {/* Toggle aveugle — responsable uniquement, tant que non readonly */}
         {isResponsable && !isReadonly && (
           <div style={styles.toggleRow}>
             <span style={styles.toggleLabel}>
@@ -222,19 +220,11 @@ export default function Saisie() {
               </span>
             </span>
             <button
-              style={{
-                ...styles.toggle,
-                background: reception.saisie_aveugle ? "#8e44ad" : "#ccc",
-                opacity: toggling ? 0.6 : 1,
-              }}
+              style={{ ...styles.toggle, background: reception.saisie_aveugle ? "#8e44ad" : "#ccc", opacity: toggling ? 0.6 : 1 }}
               onClick={handleToggleAveugle}
               disabled={toggling}
-              title="Basculer le mode saisie à l'aveugle"
             >
-              <div style={{
-                ...styles.toggleKnob,
-                transform: reception.saisie_aveugle ? "translateX(22px)" : "translateX(2px)",
-              }} />
+              <div style={{ ...styles.toggleKnob, transform: reception.saisie_aveugle ? "translateX(22px)" : "translateX(2px)" }} />
             </button>
           </div>
         )}
@@ -420,11 +410,7 @@ function QuantityScanModal({
               {row.map((k) => (
                 <button
                   key={k}
-                  style={{
-                    ...qStyles.key,
-                    ...(k === "C" ? qStyles.keyC : {}),
-                    ...(k === "⌫" ? qStyles.keyDel : {}),
-                  }}
+                  style={{ ...qStyles.key, ...(k === "C" ? qStyles.keyC : {}), ...(k === "⌫" ? qStyles.keyDel : {}) }}
                   onPointerDown={(e) => { e.preventDefault(); pressKey(k); }}
                 >
                   {k}
@@ -465,15 +451,7 @@ const qStyles: Record<string, React.CSSProperties> = {
   displayValue: { fontSize: 32, fontWeight: 800, lineHeight: 1, color: "#1a3a6b" },
   keypad: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 },
   keyRow: { display: "flex", gap: 8 },
-  key: {
-    flex: 1, height: 56, fontSize: 22, fontWeight: 700,
-    borderRadius: 10, border: "1px solid #e0e0e0",
-    background: "#f8f9fc", color: "#222",
-    cursor: "pointer", userSelect: "none",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    WebkitTapHighlightColor: "transparent",
-    touchAction: "manipulation",
-  },
+  key: { flex: 1, height: 56, fontSize: 22, fontWeight: 700, borderRadius: 10, border: "1px solid #e0e0e0", background: "#f8f9fc", color: "#222", cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent", touchAction: "manipulation" },
   keyC: { background: "#fff0f0", color: "#c0392b", border: "1px solid #f5c6c6" },
   keyDel: { background: "#fff8f0", color: "#c07800", border: "1px solid #f5dfa0", fontSize: 18 },
   comment: { width: "100%", borderRadius: 8, border: "1px solid #ddd", padding: "8px 10px", fontSize: 14, resize: "none", marginBottom: 12, fontFamily: "inherit", boxSizing: "border-box" },
@@ -496,7 +474,6 @@ function LigneRow({ ligne: l, saisieAveugle, highlighted, saving, readonly, onTa
 
   const ecart = l.quantite_attendue !== null && l.quantite_recue !== null
     ? l.quantite_recue - l.quantite_attendue : null;
-
   const statusColor = l.quantite_recue === null ? "#aaa"
     : ecart === 0 ? "#27ae60" : ecart! < 0 ? "#c0392b" : "#e67e22";
 
@@ -504,21 +481,9 @@ function LigneRow({ ligne: l, saisieAveugle, highlighted, saving, readonly, onTa
     <div
       ref={(el) => el ? ref_.current.set(l.id, el) : ref_.current.delete(l.id)}
       style={{ ...styles.ligneCard, borderLeftColor: statusColor, background: highlighted ? "#fffbe6" : "#fff", transition: "background .4s" }}
-      onTouchStart={(e) => {
-        touchStartY.current = e.touches[0].clientY;
-        touchMoved.current = false;
-      }}
-      onTouchMove={(e) => {
-        if (Math.abs(e.touches[0].clientY - touchStartY.current) > 8) {
-          touchMoved.current = true;
-        }
-      }}
-      onTouchEnd={(e) => {
-        if (!touchMoved.current && !readonly) {
-          e.preventDefault();
-          onTap();
-        }
-      }}
+      onTouchStart={(e) => { touchStartY.current = e.touches[0].clientY; touchMoved.current = false; }}
+      onTouchMove={(e) => { if (Math.abs(e.touches[0].clientY - touchStartY.current) > 8) touchMoved.current = true; }}
+      onTouchEnd={(e) => { if (!touchMoved.current && !readonly) { e.preventDefault(); onTap(); } }}
       onClick={() => { if (!readonly) onTap(); }}
     >
       <div style={styles.ligneHeader}>
@@ -528,7 +493,13 @@ function LigneRow({ ligne: l, saisieAveugle, highlighted, saving, readonly, onTa
           {l.ajout_hors_commande && <span style={styles.tagHC}>HORS COMMANDE</span>}
         </div>
         <div style={styles.ligneActions}>
-          <button style={styles.iconBtn} onClick={(e) => { e.stopPropagation(); onPhoto(); }} title="Photos">
+          {/* stopPropagation sur touchEnd ET click pour éviter que le onTouchEnd du parent ouvre la modale quantité */}
+          <button
+            style={styles.iconBtn}
+            onTouchEnd={(e) => { e.stopPropagation(); }}
+            onClick={(e) => { e.stopPropagation(); onPhoto(); }}
+            title="Photos"
+          >
             📷{l.photos.length > 0 && <sup style={styles.photoBadge}>{l.photos.length}</sup>}
           </button>
         </div>
@@ -571,33 +542,17 @@ const styles: Record<string, React.CSSProperties> = {
   metaItem: { fontSize: 13, color: "#555" },
   progressBar: { height: 6, background: "#e0e0e0", borderRadius: 4, overflow: "hidden", marginBottom: 0 },
   progressFill: { height: "100%", background: "#27ae60", borderRadius: 4, transition: "width .4s" },
-  toggleRow: {
-    display: "flex", justifyContent: "space-between", alignItems: "center",
-    marginTop: 10, paddingTop: 10, borderTop: "1px solid #f0f0f0",
-  },
+  toggleRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, paddingTop: 10, borderTop: "1px solid #f0f0f0" },
   toggleLabel: { fontSize: 13, fontWeight: 600, color: "#444" },
-  toggle: {
-    width: 48, height: 26, borderRadius: 13, border: "none", cursor: "pointer",
-    position: "relative", transition: "background .2s", flexShrink: 0,
-  },
-  toggleKnob: {
-    position: "absolute", top: 2, width: 22, height: 22, borderRadius: "50%",
-    background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,.3)",
-    transition: "transform .2s",
-  },
+  toggle: { width: 48, height: 26, borderRadius: 13, border: "none", cursor: "pointer", position: "relative", transition: "background .2s", flexShrink: 0 },
+  toggleKnob: { position: "absolute", top: 2, width: 22, height: 22, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,.3)", transition: "transform .2s" },
   actionsRow: { display: "flex", gap: 8, marginBottom: 10 },
   btnCamera: { flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #ccc", background: "#f0f4f8", cursor: "pointer", fontSize: 14, fontWeight: 600 },
   btnSearch: { flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #ccc", background: "#f0f4f8", cursor: "pointer", fontSize: 14, fontWeight: 600 },
   btnHorsCommande: { flex: 1, padding: "10px 0", borderRadius: 10, border: "1px solid #f39c12", background: "#fff9f0", color: "#c07800", cursor: "pointer", fontSize: 13, fontWeight: 600 },
   errorBanner: { background: "#fde8e8", color: "#c0392b", borderRadius: 8, padding: "10px 14px", marginBottom: 10, fontSize: 14 },
   lignesList: { display: "flex", flexDirection: "column", gap: 8, paddingBottom: 80 },
-  ligneCard: {
-    background: "#fff", borderRadius: 12, padding: "12px 14px",
-    borderLeft: "5px solid #aaa", boxShadow: "0 1px 3px rgba(0,0,0,.08)",
-    cursor: "pointer", userSelect: "none",
-    WebkitTapHighlightColor: "transparent",
-    touchAction: "pan-y",
-  },
+  ligneCard: { background: "#fff", borderRadius: 12, padding: "12px 14px", borderLeft: "5px solid #aaa", boxShadow: "0 1px 3px rgba(0,0,0,.08)", cursor: "pointer", userSelect: "none", WebkitTapHighlightColor: "transparent", touchAction: "pan-y" },
   ligneHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 },
   refTag: { fontWeight: 700, fontSize: 12, color: "#1a3a6b", background: "#eef2ff", padding: "2px 6px", borderRadius: 5 },
   refFourn: { fontSize: 11, color: "#888" },
