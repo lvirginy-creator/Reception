@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
@@ -74,7 +74,10 @@ async def list_receptions(
     if statut:
         q = q.where(Reception.statut == statut)
     if fournisseur:
-        q = q.where(Reception.fournisseur_nom.ilike(f"%{fournisseur}%"))
+        q = q.where(or_(
+            Reception.fournisseur_nom.ilike(f"%{fournisseur}%"),
+            Reception.code_fournisseur.ilike(f"%{fournisseur}%"),
+        ))
 
     q = q.order_by(Reception.numero_en.desc())
     result = await db.execute(q)
@@ -274,8 +277,6 @@ async def valider_reception(
     reception.valide_par_user_id = current_user.id
     reception.valide_le = datetime.now(timezone.utc)
 
-    # Commit explicite avant le background task pour libérer le verrou sur la ligne.
-    # Sans ça, run_post_validation ouvre une nouvelle session qui bloque sur la même ligne.
     out = _to_out(reception)
     await db.commit()
 

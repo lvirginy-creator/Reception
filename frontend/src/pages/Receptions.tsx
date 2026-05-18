@@ -47,9 +47,13 @@ export default function Receptions() {
       } else {
         let all = await db.receptions.toArray();
         if (filtreStatut) all = all.filter((r) => r.statut === filtreStatut);
-        if (filtreFournisseur) all = all.filter((r) =>
-          r.fournisseur_nom.toLowerCase().includes(filtreFournisseur.toLowerCase())
-        );
+        if (filtreFournisseur) {
+          const q = filtreFournisseur.toLowerCase();
+          all = all.filter((r) =>
+            r.fournisseur_nom.toLowerCase().includes(q) ||
+            r.code_fournisseur.toLowerCase().includes(q)
+          );
+        }
         setReceptions(all.sort((a, b) => b.numero_en.localeCompare(a.numero_en)) as Reception[]);
       }
     } catch {
@@ -99,7 +103,7 @@ export default function Receptions() {
           />
           <input
             style={{ ...styles.searchInput, flex: 2 }}
-            placeholder="Fournisseur…"
+            placeholder="Fournisseur ou code…"
             value={filtreFournisseur}
             onChange={(e) => setFiltreFournisseur(e.target.value)}
           />
@@ -166,7 +170,7 @@ function ReceptionCard({ reception: r, onClick, onValider }: { reception: Recept
 
       <div style={styles.fournisseur}>{r.fournisseur_nom}</div>
       <div style={styles.meta}>
-        Code : {r.code_fournisseur} · Importé le {new Date(r.date_import).toLocaleDateString("fr-FR")}
+        Code : {r.code_fournisseur} · Importé le {new Date(r.date_import).toLocaleDateString("fr-FR")}
         {r.saisie_aveugle && <span style={styles.tagAveugle}> · 👁 aveugle</span>}
       </div>
 
