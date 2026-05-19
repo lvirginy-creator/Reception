@@ -85,6 +85,11 @@ export default function Validation() {
       {/* Recap */}
       <div style={styles.recapCard}>
         <div style={styles.fournisseur}>{reception.fournisseur_nom}</div>
+        {reception.num_facture_fournisseur && (
+          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>
+            Facture : <strong>{reception.num_facture_fournisseur}</strong>
+          </div>
+        )}
         <div style={styles.recapStats}>
           <Stat nb={nbConformes} label="Conforme(s)" color="#27ae60" />
           <Stat nb={nbEcarts} label="Écart(s)" color="#c0392b" />

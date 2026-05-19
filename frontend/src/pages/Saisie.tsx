@@ -205,6 +205,11 @@ export default function Saisie() {
     <Layout title={`EN ${reception.numero_en}`} backTo="/receptions">
       <div style={styles.recapCard}>
         <div style={styles.fournisseur}>{reception.fournisseur_nom}</div>
+        {reception.num_facture_fournisseur && (
+          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
+            Facture : <strong>{reception.num_facture_fournisseur}</strong>
+          </div>
+        )}
         <div style={styles.metaRow}>
           {reception.saisie_aveugle && <span style={styles.tagAveugle}>👁 Saisie à l'aveugle</span>}
           <span style={styles.metaItem}>{nbSaisies}/{lignes.length} lignes saisies</span>

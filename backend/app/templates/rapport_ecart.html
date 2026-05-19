@@ -45,7 +45,7 @@
 <div class="header">
   <div>
     <h1>Rapport d'écart</h1>
-    <div style="font-size:12px; margin-top:3px; opacity:0.9">{{ reception.numero_en }}</div>
+    <div style="font-size:12px; margin-top:3px; opacity:0.9">{{ reception.numero_en }}{% if reception.num_facture_fournisseur %} — Facture {{ reception.num_facture_fournisseur }}{% endif %}</div>
   </div>
   <div class="meta">
     <div>{{ magasin.nom }}</div>
@@ -66,6 +66,10 @@
       <span>{{ reception.code_fournisseur or '—' }}</span>
     </div>
     <div class="info-item">
+      <label>N° Facture fournisseur</label>
+      <span>{{ reception.num_facture_fournisseur or '—' }}</span>
+    </div>
+    <div class="info-item">
       <label>Magasin</label>
       <span>{{ magasin.nom }} ({{ magasin.code }})</span>
     </div>
@@ -76,10 +80,6 @@
     <div class="info-item">
       <label>Importé le</label>
       <span>{{ reception.date_import.strftime('%d/%m/%Y') if reception.date_import else '—' }}</span>
-    </div>
-    <div class="info-item">
-      <label>Statut</label>
-      <span>Validé</span>
     </div>
   </div>
 </div>
