@@ -37,6 +37,7 @@ def _to_out(r: Reception) -> ReceptionOut:
         code_fournisseur=r.code_fournisseur, fournisseur_nom=r.fournisseur_nom,
         date_import=r.date_import, statut=r.statut, saisie_aveugle=r.saisie_aveugle,
         valide_le=r.valide_le, total_lignes=total, lignes_saisies=saisies,
+        num_facture_fournisseur=r.num_facture_fournisseur,
     )
 
 
@@ -51,6 +52,7 @@ def _to_detail(r: Reception) -> ReceptionDetail:
         date_import=r.date_import, statut=r.statut, saisie_aveugle=r.saisie_aveugle,
         valide_le=r.valide_le, total_lignes=total, lignes_saisies=saisies,
         lignes=r.lignes, valide_par_nom=valide_par_nom,
+        num_facture_fournisseur=r.num_facture_fournisseur,
     )
 
 
