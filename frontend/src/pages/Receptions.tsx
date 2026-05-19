@@ -66,7 +66,6 @@ export default function Receptions() {
 
   useEffect(() => { load(); }, [online, filtreStatut, filtreFournisseur]);
 
-  // Filtrage EN en client-side sur les données déjà chargées
   const filtered = filtreEN
     ? receptions.filter((r) =>
         r.numero_en.toLowerCase().includes(filtreEN.toLowerCase().replace(/^en\s*/i, ""))
@@ -78,7 +77,6 @@ export default function Receptions() {
 
   return (
     <Layout title="Mes réceptions">
-      {/* Filtres */}
       <div style={styles.filtersWrap}>
         <div style={styles.filtersRow1}>
           <select
@@ -170,7 +168,9 @@ function ReceptionCard({ reception: r, onClick, onValider }: { reception: Recept
 
       <div style={styles.fournisseur}>{r.fournisseur_nom}</div>
       <div style={styles.meta}>
-        Code : {r.code_fournisseur} · Importé le {new Date(r.date_import).toLocaleDateString("fr-FR")}
+        {r.code_fournisseur}
+        {r.num_facture_fournisseur && <span> · Facture : {r.num_facture_fournisseur}</span>}
+        <span> · Importé le {new Date(r.date_import).toLocaleDateString("fr-FR")}</span>
         {r.saisie_aveugle && <span style={styles.tagAveugle}> · 👁 aveugle</span>}
       </div>
 

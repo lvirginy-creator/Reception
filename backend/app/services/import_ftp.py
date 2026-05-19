@@ -1,7 +1,13 @@
 """
-Import FTP quotidien des fichiers réceptions et codes-barres.
+Import FTP des fichiers réceptions et codes-barres.
 
-Réceptions : <N°EN>_<Magasin>_<CodeFournisseur>.xlsx
+Réceptions : <N°EN>_<CodeMagasin>_<CodeFournisseur>_<NumFacture>.xlsx
+  - Un fichier = une réception indépendante
+  - Déduplication par nom de fichier (source_filename)
+  - Colonnes Excel : A=NUMREV, B=Société, C=Etablissement, D=Code fournisseur,
+                     E=Fournisseur, F=N° Facture, G=Réf interne, H=Réf fournisseur,
+                     I=Désignation, J=Qté attendue
+
 Codes-barres : fichier unique (remplacement intelligent).
 """
 import os
@@ -24,8 +30,9 @@ from app.models.models import (
 
 settings = get_settings()
 
+# Format : EN32600113_PDGMO_F01COU00_FC2657330B.xlsx
 RECEPTION_FILENAME_RE = re.compile(
-    r"^(?P<numero_en>[^_]+)_(?P<magasin_code>[^_]+)_(?P<code_fournisseur>.+)\.xlsx$",
+    r"^(?P<numero_en>[^_]+)_(?P<magasin_code>[^_]+)_(?P<code_fournisseur>[^_]+)_(?P<num_facture>.+)\.xlsx$",
     re.IGNORECASE,
 )
 
@@ -35,9 +42,6 @@ RECEPTION_FILENAME_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 def _make_ftp_client():
-    """Crée une nouvelle connexion FTP/SFTP. À appeler pour chaque opération
-    de données car FileZilla n'accepte pas la réutilisation de ticket TLS
-    entre plusieurs canaux de données successifs."""
     if settings.FTP_USE_SFTP:
         import paramiko
         ssh = paramiko.SSHClient()
@@ -53,7 +57,6 @@ def _make_ftp_client():
     else:
         import ftplib
 
-        # FileZilla exige la reprise de session TLS sur le canal de données.
         class _FTPTLSResuming(ftplib.FTP_TLS):
             def ntransfercmd(self, cmd, rest=None):
                 conn, size = ftplib.FTP.ntransfercmd(self, cmd, rest)
@@ -85,7 +88,6 @@ def _close(client, ssh):
 
 
 def _list_files(path: str) -> list[str]:
-    """Liste les fichiers d'un répertoire FTP (connexion fraîche)."""
     client, ssh = _make_ftp_client()
     try:
         if hasattr(client, "listdir"):  # SFTP
@@ -97,7 +99,6 @@ def _list_files(path: str) -> list[str]:
 
 
 def _read_file(remote_path: str) -> bytes:
-    """Télécharge un fichier FTP (connexion fraîche)."""
     client, ssh = _make_ftp_client()
     try:
         if hasattr(client, "open"):  # SFTP
@@ -112,7 +113,6 @@ def _read_file(remote_path: str) -> bytes:
 
 
 def _move_file(src: str, dst_dir: str, filename: str):
-    """Déplace un fichier FTP (connexion fraîche)."""
     client, ssh = _make_ftp_client()
     try:
         if hasattr(client, "rename"):  # SFTP
@@ -157,38 +157,38 @@ async def import_receptions(db: AsyncSession) -> ImportLog:
         for filename in files:
             m = RECEPTION_FILENAME_RE.match(filename)
             if not m:
-                logger.warning(f"Nom de fichier non reconnu : {filename}")
+                logger.warning(f"Nom de fichier non reconnu (attendu EN_MAGASIN_FOURN_FACTURE.xlsx) : {filename}")
                 lignes_erreur += 1
                 continue
 
             numero_en = m.group("numero_en")
             magasin_code = m.group("magasin_code")
             code_fournisseur = m.group("code_fournisseur")
+            num_facture = m.group("num_facture")
 
-            r = await db.execute(select(Magasin).where(Magasin.code == magasin_code))
-            magasin = r.scalar_one_or_none()
+            # Déduplication : un fichier = une réception, on ne réimporte jamais le même fichier
+            r_existing = await db.execute(
+                select(Reception).where(Reception.source_filename == filename)
+            )
+            if r_existing.scalar_one_or_none():
+                logger.info(f"Fichier {filename} déjà importé, ignoré")
+                _archive_file(ftp_path, filename)
+                continue
+
+            r_mag = await db.execute(select(Magasin).where(Magasin.code == magasin_code))
+            magasin = r_mag.scalar_one_or_none()
             if not magasin:
                 logger.warning(f"Magasin '{magasin_code}' introuvable pour {filename}")
                 lignes_erreur += 1
                 continue
 
-            r2 = await db.execute(
-                select(Reception).where(
-                    Reception.numero_en == numero_en,
-                    Reception.magasin_id == magasin.id,
-                )
-            )
-            if r2.scalar_one_or_none():
-                logger.info(f"Réception {numero_en}/{magasin_code} déjà importée, ignorée")
-                _archive_file(ftp_path, filename)
-                continue
-
             try:
                 content = _read_file(f"{ftp_path}/{filename}")
                 nb = await _process_reception_file(
-                    db, content, numero_en, magasin, code_fournisseur
+                    db, content, numero_en, magasin, code_fournisseur, num_facture, filename
                 )
                 lignes_traitees += nb
+                logger.info(f"{filename} importé : {nb} ligne(s)")
             except Exception as e:
                 logger.error(f"Erreur traitement {filename}: {e}")
                 lignes_erreur += 1
@@ -224,7 +224,24 @@ async def _process_reception_file(
     numero_en: str,
     magasin: Magasin,
     code_fournisseur: str,
+    num_facture: str,
+    filename: str,
 ) -> int:
+    """
+    Traite un fichier Excel de réception.
+
+    Structure des colonnes (ligne d'en-tête en ligne 1, données à partir de la ligne 2) :
+      A (0) : NUMREV             - N° EN (confirmation)
+      B (1) : Société
+      C (2) : Etablissement      - code magasin (confirmation)
+      D (3) : Code fournisseur
+      E (4) : Fournisseur        - nom du fournisseur
+      F (5) : N° Facture Fournisseur
+      G (6) : Réf interne        - référence article
+      H (7) : Réf fournisseur
+      I (8) : Désignation
+      J (9) : Qté attendue
+    """
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     ws = wb.active
 
@@ -232,10 +249,11 @@ async def _process_reception_file(
     if not rows:
         return 0
 
-    fournisseur_nom = ""
+    # Lire le nom du fournisseur depuis la première ligne de données (col E, index 4)
+    fournisseur_nom = code_fournisseur  # fallback sur le code
     for row in rows:
-        if row and len(row) >= 3 and row[2]:
-            fournisseur_nom = str(row[2]).strip()
+        if row and len(row) > 4 and row[4]:
+            fournisseur_nom = str(row[4]).strip()
             break
 
     reception = Reception(
@@ -243,6 +261,8 @@ async def _process_reception_file(
         magasin_id=magasin.id,
         code_fournisseur=code_fournisseur,
         fournisseur_nom=fournisseur_nom,
+        num_facture_fournisseur=num_facture,
+        source_filename=filename,
         statut=StatutReception.en_cours,
         saisie_aveugle=True,
     )
@@ -254,10 +274,12 @@ async def _process_reception_file(
         if not row or not any(row):
             continue
         try:
-            reference_interne = str(row[3]).strip() if row[3] else None
-            reference_fournisseur = str(row[4]).strip() if len(row) > 4 and row[4] else None
-            designation = str(row[5]).strip() if len(row) > 5 and row[5] else "Sans désignation"
-            quantite_attendue = int(row[6]) if len(row) > 6 and row[6] else None
+            reference_interne = str(row[6]).strip() if len(row) > 6 and row[6] else None
+            reference_fournisseur = str(row[7]).strip() if len(row) > 7 and row[7] else None
+            designation = str(row[8]).strip() if len(row) > 8 and row[8] else "Sans désignation"
+            # Qté : Excel peut retourner un float (ex: 60.0), on convertit en int
+            qte_raw = row[9] if len(row) > 9 else None
+            quantite_attendue = int(float(str(qte_raw))) if qte_raw is not None else None
         except (ValueError, IndexError):
             continue
 

@@ -28,6 +28,7 @@ export interface Reception {
   magasin_id: number;
   code_fournisseur: string;
   fournisseur_nom: string;
+  num_facture_fournisseur: string | null;
   date_import: string;
   statut: "en_cours" | "prete" | "valide" | "envoye" | "archive";
   saisie_aveugle: boolean;

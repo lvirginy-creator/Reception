@@ -24,7 +24,7 @@ class RoleUtilisateur(str, PyEnum):
 
 class StatutReception(str, PyEnum):
     en_cours = "en_cours"
-    prete = "prete"        # magasinier a terminé la saisie
+    prete = "prete"
     valide = "valide"
     envoye = "envoye"
     archive = "archive"
@@ -140,6 +140,8 @@ class Reception(Base):
     magasin_id: Mapped[int] = mapped_column(ForeignKey("magasin.id"), nullable=False)
     code_fournisseur: Mapped[str] = mapped_column(String(100), nullable=False)
     fournisseur_nom: Mapped[str] = mapped_column(String(300), nullable=False)
+    num_facture_fournisseur: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    source_filename: Mapped[Optional[str]] = mapped_column(String(500), nullable=True, unique=True)
     date_import: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     statut: Mapped[StatutReception] = mapped_column(Enum(StatutReception), default=StatutReception.en_cours)
     saisie_aveugle: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -149,10 +151,6 @@ class Reception(Base):
     envoye_le: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     pdf_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     hash_fichier_source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint("numero_en", "magasin_id", name="uq_reception_en_magasin"),
-    )
 
     magasin: Mapped["Magasin"] = relationship(back_populates="receptions")
     cree_par: Mapped[Optional["Utilisateur"]] = relationship(foreign_keys=[cree_par_user_id])
@@ -228,7 +226,7 @@ class Parametre(Base):
 
 
 # ---------------------------------------------------------------------------
-# ReceptionArchive (copie allégée pour traçabilité long terme)
+# ReceptionArchive
 # ---------------------------------------------------------------------------
 class ReceptionArchive(Base):
     __tablename__ = "reception_archive"

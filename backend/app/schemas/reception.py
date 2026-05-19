@@ -49,6 +49,7 @@ class ReceptionOut(BaseModel):
     magasin_id: int
     code_fournisseur: str
     fournisseur_nom: str
+    num_facture_fournisseur: str | None = None
     date_import: datetime
     statut: StatutReception
     saisie_aveugle: bool
