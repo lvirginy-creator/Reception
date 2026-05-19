@@ -115,7 +115,7 @@ def _read_file(remote_path: str) -> bytes:
 def _move_file(src: str, dst_dir: str, filename: str):
     client, ssh = _make_ftp_client()
     try:
-        if hasattr(client, "rename"):  # SFTP
+        if hasattr(client, "listdir"):  # SFTP
             try:
                 client.mkdir(dst_dir)
             except OSError:
