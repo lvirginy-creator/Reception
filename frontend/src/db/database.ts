@@ -10,6 +10,7 @@ export interface OfflineReception {
   statut: string;
   saisie_aveugle: boolean;
   valide_le: string | null;
+  num_facture_fournisseur: string | null;
   total_lignes: number;
   lignes_saisies: number;
   lignes: OfflineLigne[];
