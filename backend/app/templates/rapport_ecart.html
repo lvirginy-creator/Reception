@@ -4,36 +4,39 @@
 <meta charset="UTF-8">
 <title>Rapport d'écart — {{ reception.numero_en }}</title>
 <style>
+  @page { size: A4 landscape; margin: 12mm 14mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Arial, sans-serif; font-size: 12px; color: #1a1a2e; background: #fff; }
-  .header { background: #1a1a2e; color: #fff; padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; }
-  .header h1 { font-size: 18px; font-weight: 700; }
-  .header .meta { font-size: 11px; text-align: right; opacity: 0.85; }
-  .section { padding: 16px 24px; border-bottom: 1px solid #e5e7eb; }
-  .section h2 { font-size: 13px; font-weight: 700; color: #1a1a2e; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .info-item label { display: block; font-size: 10px; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
-  .info-item span { font-weight: 600; font-size: 12px; }
-  .stats { display: flex; gap: 16px; padding: 14px 24px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; }
-  .stat-box { flex: 1; text-align: center; padding: 10px; border-radius: 6px; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #1a1a2e; background: #fff; }
+  .header { background: #1a1a2e; color: #fff; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 17px; font-weight: 700; }
+  .header .meta { font-size: 10px; text-align: right; opacity: 0.85; line-height: 1.6; }
+  .section { padding: 12px 20px; border-bottom: 1px solid #e5e7eb; }
+  .section h2 { font-size: 12px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .info-item label { display: block; font-size: 9px; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
+  .info-item span { font-weight: 600; font-size: 11px; }
+  .stats { display: flex; gap: 14px; padding: 10px 20px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; }
+  .stat-box { flex: 1; text-align: center; padding: 8px; border-radius: 6px; }
   .stat-box.conforme { background: #d1fae5; }
   .stat-box.ecart { background: #fee2e2; }
   .stat-box.hors { background: #fef3c7; }
-  .stat-box .num { font-size: 22px; font-weight: 700; }
-  .stat-box .label { font-size: 10px; color: #374151; margin-top: 2px; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .stat-box .num { font-size: 20px; font-weight: 700; }
+  .stat-box .lbl { font-size: 9px; color: #374151; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; }
   thead tr { background: #1a1a2e; color: #fff; }
-  thead th { padding: 8px 10px; text-align: left; font-weight: 600; }
+  thead th { padding: 6px 8px; text-align: left; font-weight: 600; white-space: nowrap; }
   tbody tr:nth-child(even) { background: #f9fafb; }
-  tbody tr:hover { background: #f0f4ff; }
-  tbody td { padding: 7px 10px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
-  .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+  tbody td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+  .badge { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 9px; font-weight: 600; }
   .badge-ok { background: #d1fae5; color: #065f46; }
   .badge-ecart-pos { background: #dbeafe; color: #1e40af; }
   .badge-ecart-neg { background: #fee2e2; color: #991b1b; }
   .badge-hors { background: #fef3c7; color: #92400e; }
   .badge-nd { background: #f3f4f6; color: #6b7280; }
-  .footer { padding: 14px 24px; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; }
+  .commentaire { font-style: italic; color: #555; font-size: 9px; }
+  .photos-cell { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+  .photos-cell img { width: 38px; height: 38px; object-fit: cover; border-radius: 3px; border: 1px solid #ddd; }
+  .footer { padding: 10px 20px; font-size: 9px; color: #9ca3af; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; }
   .section-title-hors { color: #92400e; }
 </style>
 </head>
@@ -42,7 +45,7 @@
 <div class="header">
   <div>
     <h1>Rapport d'écart</h1>
-    <div style="font-size:13px; margin-top:4px; opacity:0.9">{{ reception.numero_en }}</div>
+    <div style="font-size:12px; margin-top:3px; opacity:0.9">{{ reception.numero_en }}</div>
   </div>
   <div class="meta">
     <div>{{ magasin.nom }}</div>
@@ -72,11 +75,11 @@
     </div>
     <div class="info-item">
       <label>Importé le</label>
-      <span>{{ reception.created_at.strftime('%d/%m/%Y') if reception.created_at else '—' }}</span>
+      <span>{{ reception.date_import.strftime('%d/%m/%Y') if reception.date_import else '—' }}</span>
     </div>
     <div class="info-item">
       <label>Statut</label>
-      <span>{{ reception.statut.value | title }}</span>
+      <span>Validé</span>
     </div>
   </div>
 </div>
@@ -84,15 +87,15 @@
 <div class="stats">
   <div class="stat-box conforme">
     <div class="num">{{ nb_conformes }}</div>
-    <div class="label">Conformes</div>
+    <div class="lbl">Conformes</div>
   </div>
   <div class="stat-box ecart">
     <div class="num">{{ nb_ecarts }}</div>
-    <div class="label">Avec écart</div>
+    <div class="lbl">Avec écart</div>
   </div>
   <div class="stat-box hors">
     <div class="num">{{ nb_hors_commande }}</div>
-    <div class="label">Hors commande</div>
+    <div class="lbl">Hors commande</div>
   </div>
 </div>
 
@@ -104,13 +107,15 @@
   <table>
     <thead>
       <tr>
-        <th>Réf. interne</th>
-        <th>Réf. fournisseur</th>
-        <th>Désignation</th>
-        <th style="text-align:center">Attendu</th>
-        <th style="text-align:center">Reçu</th>
-        <th style="text-align:center">Écart</th>
-        <th style="text-align:center">Statut</th>
+        <th style="width:8%">Réf. interne</th>
+        <th style="width:9%">Réf. fournisseur</th>
+        <th style="width:22%">Désignation</th>
+        <th style="width:6%;text-align:center">Attendu</th>
+        <th style="width:6%;text-align:center">Reçu</th>
+        <th style="width:6%;text-align:center">Écart</th>
+        <th style="width:8%;text-align:center">Statut</th>
+        <th style="width:20%">Commentaire</th>
+        <th style="width:15%">Photos</th>
       </tr>
     </thead>
     <tbody>
@@ -139,6 +144,20 @@
             <span class="badge badge-ecart-neg">Manquant</span>
           {% endif %}
         </td>
+        <td>
+          {% if ligne.commentaire %}
+            <span class="commentaire">{{ ligne.commentaire }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if ligne.photos %}
+            <div class="photos-cell">
+              {% for photo in ligne.photos %}
+                <img src="file://{{ STORAGE_PHOTOS }}/{{ photo.chemin_fichier }}" alt="photo">
+              {% endfor %}
+            </div>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -151,11 +170,13 @@
   <table>
     <thead>
       <tr>
-        <th>Réf. interne</th>
-        <th>Réf. fournisseur</th>
-        <th>Désignation</th>
-        <th style="text-align:center">Quantité reçue</th>
-        <th style="text-align:center">Statut</th>
+        <th style="width:10%">Réf. interne</th>
+        <th style="width:11%">Réf. fournisseur</th>
+        <th style="width:27%">Désignation</th>
+        <th style="width:8%;text-align:center">Qté reçue</th>
+        <th style="width:10%;text-align:center">Statut</th>
+        <th style="width:19%">Commentaire</th>
+        <th style="width:15%">Photos</th>
       </tr>
     </thead>
     <tbody>
@@ -166,6 +187,20 @@
         <td>{{ ligne.designation }}</td>
         <td style="text-align:center">{{ ligne.quantite_recue if ligne.quantite_recue is not none else '—' }}</td>
         <td style="text-align:center"><span class="badge badge-hors">Hors commande</span></td>
+        <td>
+          {% if ligne.commentaire %}
+            <span class="commentaire">{{ ligne.commentaire }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if ligne.photos %}
+            <div class="photos-cell">
+              {% for photo in ligne.photos %}
+                <img src="file://{{ STORAGE_PHOTOS }}/{{ photo.chemin_fichier }}" alt="photo">
+              {% endfor %}
+            </div>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>
