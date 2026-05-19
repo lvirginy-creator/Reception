@@ -112,6 +112,18 @@ def _read_file(remote_path: str) -> bytes:
         _close(client, ssh)
 
 
+def _ftp_makedirs(client, path: str):
+    """Crée récursivement les répertoires FTP manquants."""
+    parts = [p for p in path.split("/") if p]
+    current = ""
+    for part in parts:
+        current += "/" + part
+        try:
+            client.mkd(current)
+        except Exception:
+            pass  # existe déjà ou erreur ignorée
+
+
 def _move_file(src: str, dst_dir: str, filename: str):
     client, ssh = _make_ftp_client()
     try:
@@ -122,10 +134,7 @@ def _move_file(src: str, dst_dir: str, filename: str):
                 pass
             client.rename(src, f"{dst_dir}/{filename}")
         else:  # FTP
-            try:
-                client.mkd(dst_dir)
-            except Exception:
-                pass
+            _ftp_makedirs(client, dst_dir)
             client.rename(src, f"{dst_dir}/{filename}")
     finally:
         _close(client, ssh)
