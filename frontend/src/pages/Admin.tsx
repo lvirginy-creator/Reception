@@ -184,16 +184,17 @@ function MagasinsTab({ magasins, societes, refresh }: { magasins: Magasin[]; soc
   const [nom, setNom] = useState("");
   const [code, setCode] = useState("");
   const [mailDestinataire, setMailDestinataire] = useState("");
+  const [mailInput, setMailInput] = useState("");
   const [societeId, setSocieteId] = useState<number | "">(societes[0]?.id ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   function openCreate() {
-    setNom(""); setCode(""); setMailDestinataire(""); setSocieteId(societes[0]?.id ?? "");
+    setNom(""); setCode(""); setMailDestinataire(""); setMailInput(""); setSocieteId(societes[0]?.id ?? "");
     setEditing(null); setModal("create"); setError("");
   }
   function openEdit(m: Magasin) {
-    setNom(m.nom); setCode(m.code); setMailDestinataire(m.mail_destinataire ?? ""); setSocieteId(m.societe_id);
+    setNom(m.nom); setCode(m.code); setMailDestinataire(m.mail_destinataire ?? ""); setMailInput(""); setSocieteId(m.societe_id);
     setEditing(m); setModal("edit"); setError("");
   }
   function closeModal() { setModal(null); setEditing(null); }
@@ -265,8 +266,55 @@ function MagasinsTab({ magasins, societes, refresh }: { magasins: Magasin[]; soc
           <Field label="Code (3 lettres) *">
             <input style={inputStyle} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} maxLength={6} placeholder="Ex: PAP" />
           </Field>
-          <Field label="E-mail magasin (optionnel)">
-            <input style={inputStyle} type="email" value={mailDestinataire} onChange={(e) => setMailDestinataire(e.target.value)} placeholder="magasin@groupe.com" />
+          <Field label="E-mails magasin (optionnel)">
+            <div style={{ border: "1px solid #ddd", borderRadius: "6px", padding: "6px 8px", background: "#fff", minHeight: "40px" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: mailDestinataire ? "6px" : 0 }}>
+                {mailDestinataire.split(";").filter(e => e.trim()).map((email, i) => (
+                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#e8f0fe", color: "#1a56db", borderRadius: "12px", padding: "2px 10px", fontSize: "13px" }}>
+                    {email.trim()}
+                    <button type="button" onClick={() => {
+                      const list = mailDestinataire.split(";").filter(e => e.trim());
+                      list.splice(i, 1);
+                      setMailDestinataire(list.join(";"));
+                    }} style={{ background: "none", border: "none", cursor: "pointer", color: "#1a56db", fontWeight: 700, padding: "0 2px", lineHeight: 1 }}>×</button>
+                  </span>
+                ))}
+              </div>
+              <input
+                style={{ border: "none", outline: "none", width: "100%", fontSize: "14px", padding: "2px 0" }}
+                type="email"
+                value={mailInput}
+                placeholder="Ajouter un e-mail et appuyer sur Entrée"
+                onChange={(e) => setMailInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ";" || e.key === ",") {
+                    e.preventDefault();
+                    const val = mailInput.trim();
+                    if (val && val.includes("@")) {
+                      const list = mailDestinataire.split(";").filter(e => e.trim());
+                      if (!list.includes(val)) {
+                        setMailDestinataire([...list, val].join(";"));
+                      }
+                      setMailInput("");
+                    }
+                  }
+                  if (e.key === "Backspace" && !mailInput) {
+                    const list = mailDestinataire.split(";").filter(e => e.trim());
+                    list.pop();
+                    setMailDestinataire(list.join(";"));
+                  }
+                }}
+                onBlur={() => {
+                  const val = mailInput.trim();
+                  if (val && val.includes("@")) {
+                    const list = mailDestinataire.split(";").filter(e => e.trim());
+                    if (!list.includes(val)) setMailDestinataire([...list, val].join(";"));
+                    setMailInput("");
+                  }
+                }}
+              />
+            </div>
+            <div style={{ fontSize: "11px", color: "#888", marginTop: "4px" }}>Appuyez sur Entrée, ; ou , pour valider chaque adresse</div>
           </Field>
           {error && <div style={{ color: "#c0392b", marginBottom: "12px", fontSize: "14px" }}>{error}</div>}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>

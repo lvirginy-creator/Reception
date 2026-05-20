@@ -69,7 +69,7 @@ class Magasin(Base):
     societe_id: Mapped[int] = mapped_column(ForeignKey("societe.id"), nullable=False)
     nom: Mapped[str] = mapped_column(String(200), nullable=False)
     code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
-    mail_destinataire: Mapped[Optional[str]] = mapped_column(String(320))
+    mail_destinataire: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     actif: Mapped[bool] = mapped_column(Boolean, default=True)
 
     societe: Mapped["Societe"] = relationship(back_populates="magasins")

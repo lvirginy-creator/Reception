@@ -72,8 +72,10 @@ def send_validation_mail(
 
     # --- Mail principal ---
     msg = MIMEMultipart()
+    raw_to = reception.magasin.mail_destinataire or settings.MAIL_ACHATS
+    to_list = [e.strip() for e in raw_to.replace(",", ";").split(";") if e.strip()]
     msg["From"] = settings.SMTP_USER
-    msg["To"] = reception.magasin.mail_destinataire or settings.MAIL_ACHATS
+    msg["To"] = ", ".join(to_list)
     msg["Cc"] = settings.MAIL_ACHATS
     msg["Subject"] = (
         f"[{magasin_nom}] Réception EN {reception.numero_en} "
@@ -108,7 +110,7 @@ def send_validation_mail(
 
     try:
         with _smtp_connection() as server:
-            recipients = [msg["To"]]
+            recipients = to_list[:]
             if msg["Cc"] and msg["Cc"] not in recipients:
                 recipients.append(msg["Cc"])
             server.sendmail(settings.SMTP_USER, recipients, msg.as_string())
