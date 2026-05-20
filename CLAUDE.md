@@ -163,6 +163,18 @@ asyncio.run(run_post_validation(<ID_RECEPTION>))
 docker exec -it reception_db_1 psql -U reception -d reception_db \
   -c "SELECT id, numero_en, statut, valide_le, envoye_le FROM reception ORDER BY id DESC LIMIT 10;"
 
+# Réinitialiser des réceptions (remettre en_cours + effacer quantités reçues)
+# Colonnes exactes : statut, valide_le, envoye_le, valide_par_user_id
+docker exec -it reception_db_1 psql -U reception -d reception_db
+# Puis dans psql :
+# UPDATE reception SET statut='en_cours', valide_le=NULL, envoye_le=NULL, valide_par_user_id=NULL WHERE id IN (...);
+# UPDATE ligne_reception SET quantite_recue=NULL WHERE reception_id IN (...);
+
+# Supprimer des réceptions (ordre obligatoire : photos → lignes → réceptions)
+# DELETE FROM photo_ligne WHERE ligne_reception_id IN (SELECT id FROM ligne_reception WHERE reception_id IN (...));
+# DELETE FROM ligne_reception WHERE reception_id IN (...);
+# DELETE FROM reception WHERE id IN (...);
+
 # Alembic migrations
 docker exec -it reception_backend_1 alembic upgrade head
 ```
