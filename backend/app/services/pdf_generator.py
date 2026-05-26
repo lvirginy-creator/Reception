@@ -44,6 +44,7 @@ def generate_pdf(reception: Reception, validateur_nom: str) -> str:
     context = {
         "reception": reception,
         "magasin": reception.magasin,
+        "societe_nom": reception.magasin.societe.nom if reception.magasin.societe else "Groupe Caraïbes Distribution",
         "lignes": reception.lignes,
         "validateur_nom": validateur_nom,
         "date_validation": reception.valide_le or datetime.now(timezone.utc),

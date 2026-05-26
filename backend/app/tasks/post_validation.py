@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import AsyncSessionLocal
 from app.core.security import sha256_file
 from app.models.models import (
-    CodeBarre, LigneReception, Reception, SourceCodeBarre, StatutReception,
+    CodeBarre, LigneReception, Magasin, Reception, SourceCodeBarre, StatutReception,
 )
 from app.services.mailer import send_validation_mail
 from app.services.pdf_generator import generate_pdf
@@ -25,7 +25,7 @@ async def run_post_validation(reception_id: int):
                 select(Reception)
                 .options(
                     selectinload(Reception.lignes).selectinload(LigneReception.photos),
-                    selectinload(Reception.magasin),
+                    selectinload(Reception.magasin).selectinload(Magasin.societe),
                     selectinload(Reception.valide_par),
                 )
                 .where(Reception.id == reception_id)
