@@ -378,6 +378,7 @@ async def _process_codes_barres_file(db: AsyncSession, content: bytes) -> tuple[
 
     nb_traites = 0
     nb_erreurs = 0
+    seen_codes: set[str] = set()
     for ref, codes in file_data.items():
         r = await db.execute(select(Article).where(Article.reference_interne == ref))
         article = r.scalar_one_or_none()
@@ -388,6 +389,10 @@ async def _process_codes_barres_file(db: AsyncSession, content: bytes) -> tuple[
             logger.info(f"Article {ref} créé automatiquement via import codes-barres")
 
         for code in codes:
+            if code in seen_codes:
+                logger.warning(f"Code-barre dupliqué dans le fichier, ignoré : {code}")
+                continue
+            seen_codes.add(code)
             r2 = await db.execute(select(CodeBarre).where(CodeBarre.code == code))
             existing = r2.scalar_one_or_none()
             if existing:
