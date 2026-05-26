@@ -22,12 +22,31 @@ const STATUT_COLORS: Record<string, string> = {
   archive:  "#95a5a6",
 };
 
+const STORAGE_KEY = "receptions_filtres";
+
+function loadFiltres() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as { statut: string; fournisseur: string; en: string };
+  } catch { /* ignore */ }
+  return { statut: "", fournisseur: "", en: "" };
+}
+
+function saveFiltres(statut: string, fournisseur: string, en: string) {
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ statut, fournisseur, en }));
+}
+
 export default function Receptions() {
   const [receptions, setReceptions] = useState<Reception[]>([]);
-  const [filtreStatut, setFiltreStatut] = useState("");
-  const [filtreFournisseur, setFiltreFournisseur] = useState("");
-  const [filtreEN, setFiltreEN] = useState("");
+  const saved = loadFiltres();
+  const [filtreStatut, setFiltreStatutState] = useState(saved.statut);
+  const [filtreFournisseur, setFiltreFournisseurState] = useState(saved.fournisseur);
+  const [filtreEN, setFiltreENState] = useState(saved.en);
   const [loading, setLoading] = useState(true);
+
+  const setFiltreStatut = (v: string) => { setFiltreStatutState(v); saveFiltres(v, filtreFournisseur, filtreEN); };
+  const setFiltreFournisseur = (v: string) => { setFiltreFournisseurState(v); saveFiltres(filtreStatut, v, filtreEN); };
+  const setFiltreEN = (v: string) => { setFiltreENState(v); saveFiltres(filtreStatut, filtreFournisseur, v); };
   const navigate = useNavigate();
   const online = useOnlineStatus();
   const user = useAuthStore((s) => s.user);
