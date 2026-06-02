@@ -28,6 +28,7 @@ class StatutReception(str, PyEnum):
     valide = "valide"
     envoye = "envoye"
     archive = "archive"
+    ancien = "ancien"
 
 
 class SourceCodeBarre(str, PyEnum):

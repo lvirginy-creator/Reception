@@ -288,6 +288,34 @@ async def valider_reception(
     return out
 
 
+@router.patch("/{reception_id}/archiver", response_model=ReceptionOut)
+async def archiver_reception(
+    reception_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: Utilisateur = Depends(get_current_user),
+):
+    if current_user.role not in (RoleUtilisateur.responsable, RoleUtilisateur.admin):
+        raise HTTPException(status_code=403, detail="Réservé au responsable")
+
+    result = await db.execute(
+        select(Reception)
+        .options(selectinload(Reception.lignes))
+        .where(Reception.id == reception_id)
+    )
+    reception = result.scalar_one_or_none()
+    if not reception:
+        raise HTTPException(status_code=404, detail="Réception introuvable")
+    require_magasin_access(reception.magasin_id, current_user)
+
+    if reception.statut != StatutReception.en_cours:
+        raise HTTPException(status_code=400, detail="Seules les réceptions en cours peuvent être archivées")
+
+    reception.statut = StatutReception.ancien
+    out = _to_out(reception)
+    await db.commit()
+    return out
+
+
 @router.get("/{reception_id}/pdf")
 async def get_pdf(
     reception_id: int,

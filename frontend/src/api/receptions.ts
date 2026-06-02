@@ -30,7 +30,7 @@ export interface Reception {
   fournisseur_nom: string;
   num_facture_fournisseur: string | null;
   date_import: string;
-  statut: "en_cours" | "prete" | "valide" | "envoye" | "archive";
+  statut: "en_cours" | "prete" | "valide" | "envoye" | "archive" | "ancien";
   saisie_aveugle: boolean;
   valide_le: string | null;
   total_lignes: number;
@@ -80,4 +80,7 @@ export const receptionsApi = {
 
   toggleSaisieAveugle: (id: number, actif: boolean) =>
     api.patch<Reception>(`/receptions/${id}/saisie-aveugle`, { actif }).then((r) => r.data),
+
+  archiver: (id: number) =>
+    api.patch<Reception>(`/receptions/${id}/archiver`).then((r) => r.data),
 };

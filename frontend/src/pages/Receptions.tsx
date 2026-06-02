@@ -6,12 +6,15 @@ import { db } from "../db/database";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { useAuthStore } from "../store/authStore";
 
+type ArchiveConfirm = { id: number; label: string } | null;
+
 const STATUT_LABELS: Record<string, string> = {
   en_cours: "En cours",
   prete: "Prête à valider",
   valide: "Validée",
   envoye: "Envoyée",
   archive: "Archivée",
+  ancien: "Ancien",
 };
 
 const STATUT_COLORS: Record<string, string> = {
@@ -20,6 +23,7 @@ const STATUT_COLORS: Record<string, string> = {
   valide:   "#27ae60",
   envoye:   "#27ae60",
   archive:  "#95a5a6",
+  ancien:   "#95a5a6",
 };
 
 const STORAGE_KEY = "receptions_filtres";
@@ -47,10 +51,22 @@ export default function Receptions() {
   const setFiltreStatut = (v: string) => { setFiltreStatutState(v); saveFiltres(v, filtreFournisseur, filtreEN); };
   const setFiltreFournisseur = (v: string) => { setFiltreFournisseurState(v); saveFiltres(filtreStatut, v, filtreEN); };
   const setFiltreEN = (v: string) => { setFiltreENState(v); saveFiltres(filtreStatut, filtreFournisseur, v); };
+  const [archiveConfirm, setArchiveConfirm] = useState<ArchiveConfirm>(null);
   const navigate = useNavigate();
   const online = useOnlineStatus();
   const user = useAuthStore((s) => s.user);
   const isResponsable = user?.role === "responsable" || user?.role === "admin";
+
+  const confirmArchive = async () => {
+    if (!archiveConfirm) return;
+    try {
+      await receptionsApi.archiver(archiveConfirm.id);
+      setArchiveConfirm(null);
+      await load();
+    } catch {
+      setArchiveConfirm(null);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -142,6 +158,9 @@ export default function Receptions() {
               reception={r}
               onClick={() => navigate(`/receptions/${r.id}`)}
               onValider={isResponsable && r.statut === "prete" ? () => navigate(`/receptions/${r.id}/validation`) : undefined}
+              onArchiver={isResponsable && r.statut === "en_cours"
+                ? () => setArchiveConfirm({ id: r.id, label: `${r.fournisseur_nom}${r.num_facture_fournisseur ? " — " + r.num_facture_fournisseur : ""}` })
+                : undefined}
             />
           ))}
         </>
@@ -160,22 +179,48 @@ export default function Receptions() {
           ))}
         </>
       )}
+
+      {archiveConfirm && (
+        <div style={styles.modalBackdrop} onClick={() => setArchiveConfirm(null)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalIcon}>🗂️</div>
+            <div style={styles.modalTitle}>Archiver cette réception ?</div>
+            <div style={styles.modalBody}>
+              <strong>{archiveConfirm.label}</strong><br /><br />
+              Cette réception passera au statut <strong>Ancien</strong>.<br />
+              Cette action est <strong>irréversible</strong>.
+            </div>
+            <div style={styles.modalActions}>
+              <button style={styles.btnCancel} onClick={() => setArchiveConfirm(null)}>Annuler</button>
+              <button style={styles.btnConfirm} onClick={confirmArchive}>Confirmer</button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
 
-function ReceptionCard({ reception: r, onClick, onValider }: { reception: Reception; onClick: () => void; onValider?: () => void }) {
+function ReceptionCard({ reception: r, onClick, onValider, onArchiver }: { reception: Reception; onClick: () => void; onValider?: () => void; onArchiver?: () => void }) {
   const pct = r.total_lignes > 0 ? Math.round((r.lignes_saisies / r.total_lignes) * 100) : 0;
   const allSaisies = r.lignes_saisies === r.total_lignes && r.total_lignes > 0;
 
   return (
     <div style={styles.card} onClick={onClick}>
       <div style={styles.cardTop}>
-        <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const }}>
           <span style={styles.numeroEn}>EN {r.numero_en}</span>
           <span style={{ ...styles.badge, background: STATUT_COLORS[r.statut] ?? "#888" }}>
             {STATUT_LABELS[r.statut] ?? r.statut}
           </span>
+          {onArchiver && (
+            <button
+              style={styles.btnArchiver}
+              onClick={(e) => { e.stopPropagation(); onArchiver(); }}
+            >
+              ⊘ Archiver
+            </button>
+          )}
         </div>
         <div style={styles.lignesBadge}>
           <span style={{ color: allSaisies ? "#27ae60" : "#e67e22", fontWeight: 700 }}>
@@ -241,5 +286,36 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "10px", background: "#27ae60", color: "#fff",
     border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700,
     cursor: "pointer",
+  },
+  btnArchiver: {
+    fontSize: 11, fontWeight: 600,
+    color: "#6b7280", background: "#f3f4f6",
+    border: "1px solid #d1d5db", borderRadius: 6,
+    padding: "2px 8px", cursor: "pointer", whiteSpace: "nowrap" as const,
+  },
+  modalBackdrop: {
+    position: "fixed" as const, inset: 0,
+    background: "rgba(0,0,0,.45)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    zIndex: 200,
+  },
+  modal: {
+    background: "#fff", borderRadius: 14, padding: "28px 24px",
+    maxWidth: 340, width: "90%",
+    boxShadow: "0 8px 32px rgba(0,0,0,.2)", textAlign: "center" as const,
+  },
+  modalIcon: { fontSize: 36, marginBottom: 12 },
+  modalTitle: { fontSize: 16, fontWeight: 700, color: "#1a3a6b", marginBottom: 8 },
+  modalBody: { fontSize: 13, color: "#555", lineHeight: 1.6, marginBottom: 20 },
+  modalActions: { display: "flex", gap: 10 },
+  btnCancel: {
+    flex: 1, padding: 10, borderRadius: 8,
+    border: "1px solid #d1d5db", background: "#fff",
+    fontSize: 14, fontWeight: 600, color: "#374151", cursor: "pointer",
+  },
+  btnConfirm: {
+    flex: 1, padding: 10, borderRadius: 8,
+    border: "none", background: "#95a5a6",
+    fontSize: 14, fontWeight: 600, color: "#fff", cursor: "pointer",
   },
 };
