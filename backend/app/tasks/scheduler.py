@@ -97,19 +97,19 @@ async def _archive_old_receptions():
 
 
 def start_scheduler():
-    # Import FTP quotidien à 6h00 heure Guadeloupe
+    # Import FTP quotidien à 6h00 heure Guadeloupe (UTC-4)
     scheduler.add_job(
         run_all_imports,
-        CronTrigger(hour=6, minute=0),
+        CronTrigger(hour=6, minute=0, timezone="America/Guadeloupe"),
         id="import_ftp_quotidien",
         replace_existing=True,
         misfire_grace_time=3600,
     )
 
-    # Archivage mensuel le 1er de chaque mois à 3h00
+    # Archivage mensuel le 1er de chaque mois à 3h00 heure Guadeloupe
     scheduler.add_job(
         _archive_old_receptions,
-        CronTrigger(day=1, hour=3, minute=0),
+        CronTrigger(day=1, hour=3, minute=0, timezone="America/Guadeloupe"),
         id="archivage_mensuel",
         replace_existing=True,
         misfire_grace_time=3600,
