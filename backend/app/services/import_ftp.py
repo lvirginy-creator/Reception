@@ -175,9 +175,9 @@ async def import_receptions(db: AsyncSession) -> ImportLog:
             code_fournisseur = m.group("code_fournisseur")
             num_facture = m.group("num_facture")
 
-            # Déduplication : un fichier = une réception, on ne réimporte jamais le même fichier
+            # Déduplication : si au moins une réception issue de ce fichier existe, fichier déjà traité
             r_existing = await db.execute(
-                select(Reception).where(Reception.source_filename == filename)
+                select(Reception).where(Reception.source_filename.like(f"{filename}%"))
             )
             if r_existing.scalar_one_or_none():
                 logger.info(f"Fichier {filename} déjà importé, ignoré")
@@ -240,9 +240,9 @@ async def _process_reception_file(
     Traite un fichier Excel de réception.
 
     Structure des colonnes (ligne d'en-tête en ligne 1, données à partir de la ligne 2) :
-      A (0) : NUMREV             - N° EN (confirmation)
+      A (0) : NUMREV             - N° EN (par ligne — peut différer du nom de fichier)
       B (1) : Société
-      C (2) : Etablissement      - code magasin (confirmation)
+      C (2) : Etablissement      - code magasin
       D (3) : Code fournisseur
       E (4) : Fournisseur        - nom du fournisseur
       F (5) : N° Facture Fournisseur
@@ -250,6 +250,9 @@ async def _process_reception_file(
       H (7) : Réf fournisseur
       I (8) : Désignation
       J (9) : Qté attendue
+
+    Un fichier peut contenir plusieurs EN (une commande fournisseur = plusieurs ENs).
+    On crée une réception distincte par EN trouvé dans la colonne A.
     """
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     ws = wb.active
@@ -259,62 +262,85 @@ async def _process_reception_file(
         return 0
 
     # Lire le nom du fournisseur depuis la première ligne de données (col E, index 4)
-    fournisseur_nom = code_fournisseur  # fallback sur le code
+    fournisseur_nom = code_fournisseur
     for row in rows:
         if row and len(row) > 4 and row[4]:
             fournisseur_nom = str(row[4]).strip()
             break
 
-    reception = Reception(
-        numero_en=numero_en,
-        magasin_id=magasin.id,
-        code_fournisseur=code_fournisseur,
-        fournisseur_nom=fournisseur_nom,
-        num_facture_fournisseur=num_facture,
-        source_filename=filename,
-        statut=StatutReception.en_cours,
-        saisie_aveugle=True,
-    )
-    db.add(reception)
-    await db.flush()
-
-    nb = 0
+    # Grouper les lignes par numéro EN (colonne A).
+    # Si la colonne A est vide ou absente, on utilise le numéro EN du nom de fichier.
+    from collections import defaultdict
+    rows_by_en: dict[str, list] = defaultdict(list)
     for row in rows:
         if not row or not any(row):
             continue
-        try:
-            reference_interne = str(row[6]).strip() if len(row) > 6 and row[6] else None
-            reference_fournisseur = str(row[7]).strip() if len(row) > 7 and row[7] else None
-            designation = str(row[8]).strip() if len(row) > 8 and row[8] else "Sans désignation"
-            # Qté : Excel peut retourner un float (ex: 60.0), on convertit en int
-            qte_raw = row[9] if len(row) > 9 else None
-            quantite_attendue = int(float(str(qte_raw))) if qte_raw is not None else None
-        except (ValueError, IndexError):
-            continue
+        en_in_row = str(row[0]).strip() if row[0] else None
+        en_key = en_in_row if en_in_row else numero_en
+        rows_by_en[en_key].append(row)
 
-        if not reference_interne:
-            continue
+    nb_total = 0
 
-        r = await db.execute(select(Article).where(Article.reference_interne == reference_interne))
-        article = r.scalar_one_or_none()
-        if not article:
-            article = Article(reference_interne=reference_interne, designation=designation)
-            db.add(article)
-            await db.flush()
-
-        ligne = LigneReception(
-            reception_id=reception.id,
-            article_id=article.id,
-            reference_interne=reference_interne,
-            reference_fournisseur=reference_fournisseur,
-            designation=designation,
-            quantite_attendue=quantite_attendue,
+    for en_key, en_rows in rows_by_en.items():
+        # Déduplication : si une réception avec ce filename+EN existe déjà, on ignore
+        # (utile si le fichier est re-traité partiellement après erreur)
+        source_key = f"{filename}#{en_key}"
+        r_existing = await db.execute(
+            select(Reception).where(Reception.source_filename == source_key)
         )
-        db.add(ligne)
-        nb += 1
+        if r_existing.scalar_one_or_none():
+            logger.info(f"Réception {en_key} du fichier {filename} déjà importée, ignorée")
+            continue
 
-    await db.flush()
-    return nb
+        reception = Reception(
+            numero_en=en_key,
+            magasin_id=magasin.id,
+            code_fournisseur=code_fournisseur,
+            fournisseur_nom=fournisseur_nom,
+            num_facture_fournisseur=num_facture,
+            source_filename=source_key,
+            statut=StatutReception.en_cours,
+            saisie_aveugle=True,
+        )
+        db.add(reception)
+        await db.flush()
+
+        for row in en_rows:
+            try:
+                reference_interne = str(row[6]).strip() if len(row) > 6 and row[6] else None
+                reference_fournisseur = str(row[7]).strip() if len(row) > 7 and row[7] else None
+                designation = str(row[8]).strip() if len(row) > 8 and row[8] else "Sans désignation"
+                # Qté : Excel peut retourner un float (ex: 60.0), on convertit en int
+                qte_raw = row[9] if len(row) > 9 else None
+                quantite_attendue = int(float(str(qte_raw))) if qte_raw is not None else None
+            except (ValueError, IndexError):
+                continue
+
+            if not reference_interne:
+                continue
+
+            r = await db.execute(select(Article).where(Article.reference_interne == reference_interne))
+            article = r.scalar_one_or_none()
+            if not article:
+                article = Article(reference_interne=reference_interne, designation=designation)
+                db.add(article)
+                await db.flush()
+
+            ligne = LigneReception(
+                reception_id=reception.id,
+                article_id=article.id,
+                reference_interne=reference_interne,
+                reference_fournisseur=reference_fournisseur,
+                designation=designation,
+                quantite_attendue=quantite_attendue,
+            )
+            db.add(ligne)
+            nb_total += 1
+
+        await db.flush()
+        logger.info(f"Réception {en_key} créée depuis {filename} : {len(en_rows)} ligne(s)")
+
+    return nb_total
 
 
 # ---------------------------------------------------------------------------
