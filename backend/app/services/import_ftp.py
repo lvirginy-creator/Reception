@@ -175,9 +175,12 @@ async def import_receptions(db: AsyncSession) -> ImportLog:
             code_fournisseur = m.group("code_fournisseur")
             num_facture = m.group("num_facture")
 
-            # Déduplication : si au moins une réception issue de ce fichier existe, fichier déjà traité
+            # Déduplication : fichier déjà traité si au moins une réception non-ancienne existe
             r_existing = await db.execute(
-                select(Reception).where(Reception.source_filename.like(f"{filename}%"))
+                select(Reception).where(
+                    Reception.source_filename.like(f"{filename}%"),
+                    Reception.statut != StatutReception.ancien,
+                )
             )
             if r_existing.scalar_one_or_none():
                 logger.info(f"Fichier {filename} déjà importé, ignoré")
@@ -282,11 +285,13 @@ async def _process_reception_file(
     nb_total = 0
 
     for en_key, en_rows in rows_by_en.items():
-        # Déduplication : si une réception avec ce filename+EN existe déjà, on ignore
-        # (utile si le fichier est re-traité partiellement après erreur)
+        # Déduplication : si une réception non-ancienne avec ce filename+EN existe, on ignore
         source_key = f"{filename}#{en_key}"
         r_existing = await db.execute(
-            select(Reception).where(Reception.source_filename == source_key)
+            select(Reception).where(
+                Reception.source_filename == source_key,
+                Reception.statut != StatutReception.ancien,
+            )
         )
         if r_existing.scalar_one_or_none():
             logger.info(f"Réception {en_key} du fichier {filename} déjà importée, ignorée")
