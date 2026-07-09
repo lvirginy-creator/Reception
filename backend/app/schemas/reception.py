@@ -67,3 +67,17 @@ class ReceptionDetail(ReceptionOut):
 
 class SaisieAveugletoggle(BaseModel):
     actif: bool
+
+
+class ReceptionArchiveOut(BaseModel):
+    id: int
+    reception_id: int
+    numero_en: str
+    magasin_id: int
+    fournisseur_nom: str
+    statut: str
+    valide_le: datetime | None = None
+    archived_at: datetime
+    lignes_json: list | None = None
+
+    model_config = {"from_attributes": True}

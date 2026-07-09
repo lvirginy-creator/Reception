@@ -11,11 +11,11 @@ from app.core.config import get_settings
 from app.api.deps import get_current_user, require_magasin_access
 from app.models.models import (
     Reception, LigneReception, PhotoLigne, Utilisateur,
-    StatutReception, RoleUtilisateur,
+    StatutReception, RoleUtilisateur, ReceptionArchive,
 )
 from app.schemas.reception import (
     ReceptionOut, ReceptionDetail, LigneUpdate, LigneCreate,
-    SaisieAveugletoggle,
+    SaisieAveugletoggle, ReceptionArchiveOut,
 )
 
 router = APIRouter(prefix="/receptions", tags=["receptions"])
@@ -286,6 +286,18 @@ async def valider_reception(
     background_tasks.add_task(run_post_validation, reception_id)
 
     return out
+
+
+@router.get("/historique", response_model=list[ReceptionArchiveOut])
+async def list_historique(
+    db: AsyncSession = Depends(get_db),
+    current_user: Utilisateur = Depends(get_current_user),
+):
+    q = select(ReceptionArchive).order_by(ReceptionArchive.archived_at.desc())
+    if current_user.role in (RoleUtilisateur.magasinier, RoleUtilisateur.responsable):
+        q = q.where(ReceptionArchive.magasin_id == current_user.magasin_id)
+    result = await db.execute(q)
+    return result.scalars().all()
 
 
 @router.patch("/{reception_id}/archiver", response_model=ReceptionOut)

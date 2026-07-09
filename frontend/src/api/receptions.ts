@@ -83,4 +83,26 @@ export const receptionsApi = {
 
   archiver: (id: number) =>
     api.patch<Reception>(`/receptions/${id}/archiver`).then((r) => r.data),
+
+  historique: () =>
+    api.get<ReceptionArchiveItem[]>("/receptions/historique").then((r) => r.data),
 };
+
+export interface ReceptionArchiveItem {
+  id: number;
+  reception_id: number;
+  numero_en: string;
+  magasin_id: number;
+  fournisseur_nom: string;
+  statut: string;
+  valide_le: string | null;
+  archived_at: string;
+  lignes_json: Array<{
+    reference_interne: string;
+    designation: string;
+    quantite_attendue: number | null;
+    quantite_recue: number | null;
+    commentaire: string | null;
+    ajout_hors_commande: boolean;
+  }> | null;
+}

@@ -5,6 +5,7 @@ import Receptions from "./pages/Receptions";
 import Saisie from "./pages/Saisie";
 import Validation from "./pages/Validation";
 import Admin from "./pages/Admin";
+import Historique from "./pages/Historique";
 
 function PrivateRoute({ children, roles }: { children: React.ReactNode; roles?: string[] }) {
   const user = useAuthStore((s) => s.user);
@@ -34,6 +35,11 @@ export default function App() {
         <Route
           path="/receptions/:id"
           element={<PrivateRoute><Saisie /></PrivateRoute>}
+        />
+
+        <Route
+          path="/historique"
+          element={<PrivateRoute><Historique /></PrivateRoute>}
         />
 
         <Route

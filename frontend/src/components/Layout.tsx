@@ -39,6 +39,9 @@ export default function Layout({ children, title, backTo }: LayoutProps) {
         </div>
         <div style={styles.headerRight}>
           <SyncIndicator />
+          <button style={styles.adminBtn} onClick={() => navigate("/historique")}>
+            📋 Historique
+          </button>
           {user?.role === "admin" && (
             <button style={styles.adminBtn} onClick={() => navigate("/admin")}>
               ⚙ Admin
