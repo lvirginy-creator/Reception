@@ -279,7 +279,11 @@ async def _process_reception_file(
         if not row or not any(row):
             continue
         en_in_row = str(row[0]).strip() if row[0] else None
-        en_key = en_in_row if en_in_row else numero_en
+        # L'ERP écrit "EN32600148.00001" en col A — on ne garde que la partie avant le point
+        if en_in_row:
+            en_key = en_in_row.split(".")[0]
+        else:
+            en_key = numero_en
         rows_by_en[en_key].append(row)
 
     nb_total = 0
