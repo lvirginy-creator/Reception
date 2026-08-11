@@ -41,12 +41,12 @@ async def run_post_validation(reception_id: int):
                 else "Inconnu"
             )
 
-            # Collecter les nouveaux codes-barres (ajout_terrain) de cette réception.
+            # Collecter les nouveaux codes-barres (ajout_terrain, pas encore notifiés).
             # On charge created_by en eager pour éviter le lazy-load interdit en async.
             nouveaux_codes: list[dict] = []
+            cbs_a_notifier: list[CodeBarre] = []
             for ligne in reception.lignes:
                 if ligne.article_id is None:
-                    # Ligne hors commande sans article associé en base
                     continue
                 r = await db.execute(
                     select(CodeBarre)
@@ -54,6 +54,7 @@ async def run_post_validation(reception_id: int):
                     .where(
                         CodeBarre.article_id == ligne.article_id,
                         CodeBarre.source == SourceCodeBarre.ajout_terrain,
+                        CodeBarre.notifie == False,  # noqa: E712
                     )
                 )
                 for cb in r.scalars().all():
@@ -68,6 +69,7 @@ async def run_post_validation(reception_id: int):
                         "date": cb.created_at.strftime("%d/%m/%Y %H:%M"),
                         "saisi_par": createur,
                     })
+                    cbs_a_notifier.append(cb)
 
             # Générer le PDF
             pdf_path = generate_pdf(reception, validateur_nom)
@@ -79,6 +81,8 @@ async def run_post_validation(reception_id: int):
             if sent:
                 reception.statut = StatutReception.envoye
                 reception.envoye_le = datetime.now(timezone.utc)
+                for cb in cbs_a_notifier:
+                    cb.notifie = True
 
             await db.commit()
             logger.info(f"post_validation OK pour réception {reception_id}")
