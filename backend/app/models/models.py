@@ -125,6 +125,7 @@ class CodeBarre(Base):
     source: Mapped[SourceCodeBarre] = mapped_column(Enum(SourceCodeBarre, values_callable=lambda x: [e.value for e in x]), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("utilisateur.id"), nullable=True)
+    notifie: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     article: Mapped["Article"] = relationship(back_populates="codes_barres")
     created_by: Mapped[Optional["Utilisateur"]] = relationship(foreign_keys=[created_by_user_id])
