@@ -196,9 +196,10 @@ async def import_receptions(db: AsyncSession) -> ImportLog:
 
             try:
                 content = _read_file(f"{ftp_path}/{filename}")
-                nb = await _process_reception_file(
-                    db, content, numero_en, magasin, code_fournisseur, num_facture, filename
-                )
+                async with db.begin_nested():  # savepoint — isole chaque fichier
+                    nb = await _process_reception_file(
+                        db, content, numero_en, magasin, code_fournisseur, num_facture, filename
+                    )
                 lignes_traitees += nb
                 logger.info(f"{filename} importé : {nb} ligne(s)")
             except Exception as e:
@@ -292,14 +293,16 @@ async def _process_reception_file(
         # Déduplication : si une réception non-ancienne avec ce filename+EN existe, on ignore
         source_key = f"{filename}#{en_key}"
         r_existing = await db.execute(
-            select(Reception).where(
-                Reception.source_filename == source_key,
-                Reception.statut != StatutReception.ancien,
-            )
+            select(Reception).where(Reception.source_filename == source_key)
         )
-        if r_existing.scalar_one_or_none():
-            logger.info(f"Réception {en_key} du fichier {filename} déjà importée, ignorée")
-            continue
+        existing = r_existing.scalar_one_or_none()
+        if existing:
+            if existing.statut != StatutReception.ancien:
+                logger.info(f"Réception {en_key} du fichier {filename} déjà importée, ignorée")
+                continue
+            # Réception ancienne : on la supprime pour permettre la réimport
+            await db.delete(existing)
+            await db.flush()
 
         reception = Reception(
             numero_en=en_key,
