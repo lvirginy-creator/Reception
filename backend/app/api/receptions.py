@@ -38,6 +38,9 @@ def _to_out(r: Reception) -> ReceptionOut:
         date_import=r.date_import, statut=r.statut, saisie_aveugle=r.saisie_aveugle,
         valide_le=r.valide_le, total_lignes=total, lignes_saisies=saisies,
         num_facture_fournisseur=r.num_facture_fournisseur,
+        type_commande=r.type_commande,
+        num_conteneur=r.num_conteneur,
+        commentaire_interne=r.commentaire_interne,
     )
 
 

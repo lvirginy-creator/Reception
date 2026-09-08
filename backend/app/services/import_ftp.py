@@ -304,6 +304,18 @@ async def _process_reception_file(
             await db.delete(existing)
             await db.flush()
 
+        # Lire TYPCDE (col L, idx 11), NUMCNT (col M, idx 12), CMICOM (col N, idx 13)
+        # depuis la première ligne de ce groupe EN
+        type_commande = None
+        num_conteneur = None
+        commentaire_interne = None
+        for first_row in en_rows:
+            if first_row and len(first_row) > 11:
+                type_commande = str(first_row[11]).strip() if first_row[11] else None
+                num_conteneur = str(first_row[12]).strip() if len(first_row) > 12 and first_row[12] else None
+                commentaire_interne = str(first_row[13]).strip() if len(first_row) > 13 and first_row[13] else None
+            break
+
         reception = Reception(
             numero_en=en_key,
             magasin_id=magasin.id,
@@ -311,6 +323,9 @@ async def _process_reception_file(
             fournisseur_nom=fournisseur_nom,
             num_facture_fournisseur=num_facture,
             source_filename=source_key,
+            type_commande=type_commande,
+            num_conteneur=num_conteneur,
+            commentaire_interne=commentaire_interne,
             statut=StatutReception.en_cours,
             saisie_aveugle=True,
         )

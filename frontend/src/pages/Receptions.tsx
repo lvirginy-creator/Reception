@@ -238,6 +238,14 @@ function ReceptionCard({ reception: r, onClick, onValider, onArchiver }: { recep
         {r.saisie_aveugle && <span style={styles.tagAveugle}> · 👁 aveugle</span>}
       </div>
 
+      {(r.type_commande || r.num_conteneur || r.commentaire_interne) && (
+        <div style={styles.metaExtra}>
+          {r.type_commande && <span style={styles.tagExtra}>{r.type_commande}</span>}
+          {r.num_conteneur && <span style={styles.tagExtra}>📦 {r.num_conteneur}</span>}
+          {r.commentaire_interne && <span style={styles.metaComment}>{r.commentaire_interne}</span>}
+        </div>
+      )}
+
       <div style={styles.progressBar}>
         <div style={{ ...styles.progressFill, width: `${pct}%`, background: allSaisies ? "#27ae60" : "#2980b9" }} />
       </div>
@@ -280,6 +288,9 @@ const styles: Record<string, React.CSSProperties> = {
   lignesBadge: { textAlign: "right", fontSize: 15 },
   lignesLabel: { fontSize: 11, color: "#888" },
   progressBar: { height: 4, background: "#e0e0e0", borderRadius: 4, marginTop: 10, overflow: "hidden" },
+  metaExtra: { display: "flex", flexWrap: "wrap" as const, gap: 6, marginTop: 5, alignItems: "center" },
+  tagExtra: { background: "#eaf0fb", color: "#1a3a6b", borderRadius: 5, padding: "2px 7px", fontSize: 11, fontWeight: 600 },
+  metaComment: { fontSize: 11, color: "#666", fontStyle: "italic" as const },
   progressFill: { height: "100%", borderRadius: 4, transition: "width .3s" },
   validerBtn: {
     display: "block", width: "100%", marginTop: 10,

@@ -153,6 +153,9 @@ class Reception(Base):
     envoye_le: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     pdf_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     hash_fichier_source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    type_commande: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    num_conteneur: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    commentaire_interne: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     magasin: Mapped["Magasin"] = relationship(back_populates="receptions")
     cree_par: Mapped[Optional["Utilisateur"]] = relationship(foreign_keys=[cree_par_user_id])

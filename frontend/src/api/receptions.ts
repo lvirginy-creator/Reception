@@ -35,6 +35,9 @@ export interface Reception {
   valide_le: string | null;
   total_lignes: number;
   lignes_saisies: number;
+  type_commande: string | null;
+  num_conteneur: string | null;
+  commentaire_interne: string | null;
 }
 
 export interface ReceptionDetail extends Reception {

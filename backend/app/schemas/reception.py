@@ -56,6 +56,9 @@ class ReceptionOut(BaseModel):
     valide_le: datetime | None = None
     total_lignes: int = 0
     lignes_saisies: int = 0
+    type_commande: str | None = None
+    num_conteneur: str | None = None
+    commentaire_interne: str | None = None
 
     model_config = {"from_attributes": True}
 
