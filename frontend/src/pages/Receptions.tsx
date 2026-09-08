@@ -230,6 +230,13 @@ function ReceptionCard({ reception: r, onClick, onValider, onArchiver }: { recep
         </div>
       </div>
 
+      {r.num_conteneur && (
+        <div style={styles.conteneurBadge}>
+          <span style={styles.conteneurDot} />
+          {r.num_conteneur}
+        </div>
+      )}
+
       <div style={styles.fournisseur}>{r.fournisseur_nom}</div>
       <div style={styles.meta}>
         {r.code_fournisseur}
@@ -238,10 +245,9 @@ function ReceptionCard({ reception: r, onClick, onValider, onArchiver }: { recep
         {r.saisie_aveugle && <span style={styles.tagAveugle}> · 👁 aveugle</span>}
       </div>
 
-      {(r.type_commande || r.num_conteneur || r.commentaire_interne) && (
+      {(r.type_commande || r.commentaire_interne) && (
         <div style={styles.metaExtra}>
           {r.type_commande && <span style={styles.tagExtra}>{r.type_commande}</span>}
-          {r.num_conteneur && <span style={styles.tagExtra}>📦 {r.num_conteneur}</span>}
           {r.commentaire_interne && <span style={styles.metaComment}>{r.commentaire_interne}</span>}
         </div>
       )}
@@ -288,6 +294,17 @@ const styles: Record<string, React.CSSProperties> = {
   lignesBadge: { textAlign: "right", fontSize: 15 },
   lignesLabel: { fontSize: 11, color: "#888" },
   progressBar: { height: 4, background: "#e0e0e0", borderRadius: 4, marginTop: 10, overflow: "hidden" },
+  conteneurBadge: {
+    display: "inline-flex", alignItems: "center", gap: 5,
+    background: "#eaf0fb", color: "#1a3a6b",
+    borderRadius: 6, padding: "2px 8px",
+    fontSize: 12, fontWeight: 600,
+    marginBottom: 4,
+  },
+  conteneurDot: {
+    display: "inline-block", width: 10, height: 10,
+    borderRadius: "50%", background: "#e67e22", flexShrink: 0,
+  },
   metaExtra: { display: "flex", flexWrap: "wrap" as const, gap: 6, marginTop: 5, alignItems: "center" },
   tagExtra: { background: "#eaf0fb", color: "#1a3a6b", borderRadius: 5, padding: "2px 7px", fontSize: 11, fontWeight: 600 },
   metaComment: { fontSize: 11, color: "#666", fontStyle: "italic" as const },
