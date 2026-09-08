@@ -320,6 +320,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#6b7280", background: "#f3f4f6",
     border: "1px solid #d1d5db", borderRadius: 6,
     padding: "2px 8px", cursor: "pointer", whiteSpace: "nowrap" as const,
+    lineHeight: 1.4, appearance: "none" as const,
   },
   modalBackdrop: {
     position: "fixed" as const, inset: 0,
