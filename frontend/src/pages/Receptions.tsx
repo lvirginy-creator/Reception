@@ -316,11 +316,14 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
   btnArchiver: {
+    display: "inline-flex", alignItems: "center",
     fontSize: 11, fontWeight: 600,
     color: "#6b7280", background: "#f3f4f6",
     border: "1px solid #d1d5db", borderRadius: 6,
-    padding: "2px 8px", cursor: "pointer", whiteSpace: "nowrap" as const,
-    lineHeight: 1.4, appearance: "none" as const,
+    padding: "0 8px", height: 20,
+    cursor: "pointer", whiteSpace: "nowrap" as const,
+    lineHeight: 1, appearance: "none" as const,
+    margin: 0,
   },
   modalBackdrop: {
     position: "fixed" as const, inset: 0,
