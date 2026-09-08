@@ -86,7 +86,8 @@ export default function Receptions() {
           const q = filtreFournisseur.toLowerCase();
           all = all.filter((r) =>
             r.fournisseur_nom.toLowerCase().includes(q) ||
-            r.code_fournisseur.toLowerCase().includes(q)
+            r.code_fournisseur.toLowerCase().includes(q) ||
+            (r.num_conteneur ?? "").toLowerCase().includes(q)
           );
         }
         setReceptions(all.sort((a, b) => b.numero_en.localeCompare(a.numero_en)) as Reception[]);
@@ -136,7 +137,7 @@ export default function Receptions() {
           />
           <input
             style={{ ...styles.searchInput, flex: 2 }}
-            placeholder="Fournisseur ou code…"
+            placeholder="Fournisseur, code ou conteneur…"
             value={filtreFournisseur}
             onChange={(e) => setFiltreFournisseur(e.target.value)}
           />

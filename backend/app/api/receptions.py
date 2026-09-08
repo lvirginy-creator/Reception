@@ -82,6 +82,7 @@ async def list_receptions(
         q = q.where(or_(
             Reception.fournisseur_nom.ilike(f"%{fournisseur}%"),
             Reception.code_fournisseur.ilike(f"%{fournisseur}%"),
+            Reception.num_conteneur.ilike(f"%{fournisseur}%"),
         ))
 
     q = q.order_by(Reception.numero_en.desc())
